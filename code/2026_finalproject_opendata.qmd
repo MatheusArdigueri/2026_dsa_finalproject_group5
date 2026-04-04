@@ -1,0 +1,132 @@
+---
+title: "Open_data"
+format: html
+editor: visual
+---
+
+# Importing libraries
+```{r}
+library(tidyverse)
+library(USAboundaries) # for US state boundaries
+library(sf) # for US map
+library(daymetr)
+
+```
+
+# Reading CSV file containing field
+```{r }
+field <- read_csv("../data/training/training_meta_filtered.csv")
+
+field
+```
+
+# EDA
+```{r Distinct years}
+field %>%
+  distinct(year)
+```
+
+```{r Distinct sites}
+field %>%
+  distinct(site)
+
+```
+
+40 different locations along 10 years. 
+
+```{r Plot of locations}
+states <- us_states() %>%
+  filter(!(state_abbr %in% c("PR","AK","HI")))
+
+ggplot() +
+  geom_sf(data = states) +
+  geom_point(data = field, aes(
+             x = longitude,
+             y = latitude,
+             color = site))
+```
+# Using Daymet to download opensource climate data
+```{r}
+names(field)
+
+daymet_all <- field %>%
+  mutate(weather = pmap(list(.y = year,
+                             .site = site,
+                             .lat = latitude,
+                             .lon = longitude),
+                        function(.y, .site, .lat, .lon) 
+                         download_daymet(site = .site,
+                                    lat = .lat,
+                                    lon = .lon,
+                                    start = .y,
+                                    end = .y,
+                                    silent = T,
+                                    simplify = T) %>%
+                          rename(.year = year,
+                                 .site = site)
+                        
+                        ))
+
+daymet_all$weather[1]
+
+daymet_all_2 <- daymet_all %>%
+  rename(lat = latitude,
+         long = longitude)
+
+```
+
+# Unnesting downloaded data
+```{r}
+daymet_all_unnest <- daymet_all_2 %>%
+  unnest(weather) %>%
+  pivot_wider(names_from = measurement,
+              values_from = value) %>%
+  janitor::clean_names()
+
+daymet_all_unnest 
+```
+
+# Exporting result
+```{r}
+write_csv(daymet_all_unnest,
+          file="../data/training/2026_project_fieldweatherdata.csv")
+```
+
+# Reading exported result
+```{r}
+fieldweather <- read_csv("../data/training/2026_project_fieldweatherdata.csv")
+
+fieldweather
+```
+
+# EDA of weather downloaded data
+
+```{r}
+names(fieldweather)
+```
+```{r}
+fieldweather %>%
+  pivot_longer(cols = dayl_s:vp_pa) %>%
+  ggplot(aes(x = value)) +
+  geom_density() +
+  facet_wrap(~name, scales = "free")
+```
+```{r}
+climate_month <- fieldweather %>%
+  dplyr::select(year, site, lat, long,
+                yday,
+                dayl.s = dayl_s, 
+                prcp.mm = prcp_mm_day,
+                srad.wm2 = srad_w_m_2, 
+                tmax.c = tmax_deg_c, 
+                tmin.c = tmin_deg_c,
+                vp.pa = vp_pa
+                ) %>%
+  mutate(date_chr = paste0(year, "/", yday)) %>%
+  mutate(date = as.Date(date_chr, "%Y/%j")) %>%
+  mutate(month = month(date)) %>%
+  mutate(month_abb = month(date, label = TRUE, locale = "en_US"))
+
+climate_month
+```
+

@@ -1,0 +1,75 @@
+---
+title: "2026_data_wrangling"
+format: html
+editor: visual
+---
+
+# Importing libraries
+```{r}
+library(tidyverse)
+library(janitor)
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(USAboundaries)
+library(ggplot2)
+```
+
+# Reading dataframe
+```{r}
+metadata <- read_csv("./data/training/training_meta.csv")
+
+metadata
+```
+
+# EDA 
+```{r}
+summary(metadata)
+```
+```{r}
+states <- us_states() %>%
+  filter(!(state_abbr %in% c("PR","AK","HI")))
+
+ggplot() +
+  geom_sf(data = states) +
+  geom_point(data = metadata, aes(
+             x = longitude,
+             y = latitude,
+             color = site))
+```
+
+
+US ranges latitude from 25 to 50 and longitude from -125 to -66, so there are sites outside US. (Removing since project is based on US)
+
+Also there are two places in Canada, Ontario. ONH1 ONH2.
+
+# Filtering data
+```{r}
+met_filt <- metadata %>%
+  filter(
+    longitude >= -125 & longitude <= -70,
+    latitude >= 25 & latitude <= 50
+  ) %>%
+  filter(!site %in% c("ONH1", "ONH2"))
+
+
+summary(met_filt)
+```
+Looks good now, lets confirm everything is right.
+
+```{r} 
+ggplot() +
+  geom_sf(data = states) +
+  geom_point(data = met_filt, aes(
+             x = longitude,
+             y = latitude,
+             color = site))
+```
+# Exporting Correct data
+```{r}
+write.csv(met_filt,
+          file = "./data/training/training_meta_filtered.csv")
+
+
+```
+
