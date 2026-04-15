@@ -42,6 +42,211 @@ You are also being provided with the following **testing data** for year 2024:
 One difference from class is that **you are not provided with the test data yield (predicted variable)**, only the predictor variables.  
 Therefore, using the training data wisely to create predictive models will be important.  
 
+## 1. Cleaning the raw datasets
+Loading necessary libraries
+
+```{r}
+library(readxl) # to read excel files
+library(janitor) # to clean data
+library(dplyr) # wrangling
+library(tidyr) # wrangling
+library(readr) # to export csv
+```
+Loading training and testing data
+  
+```{r}
+training_trait <- read_csv("../data/training/training_trait.csv")
+training_meta <- read_csv("../data/training/training_meta.csv")
+training_soil <- read_csv("../data/training/training_soil.csv")
+testing_submission <- read_csv("../data/testing/testing_submission.csv")
+testing_meta <- read_csv("../data/testing/testing_meta.csv")
+testing_soil <- read_csv("../data/testing/testing_soil.csv")
+```
+
+```{r}
+training_trait %>% distinct(site)
+training_meta %>% distinct(site)
+training_soil %>% distinct(site)
+testing_submission %>% distinct(site)
+testing_meta %>% distinct(site)
+testing_soil %>% distinct(site)
+```
+
+Inspecting the training_trait dataset
+
+```{r}
+head(training_trait)
+names(training_trait)
+
+#Summary of the variables in the data
+summary(training_trait)
+
+# Number of distinct sites
+training_trait %>% distinct(site)
+
+#Missing values for variables 
+colSums(is.na(training_trait))
+
+# Checking for duplicated rows
+dup_rows_trait <- training_trait[duplicated(training_trait), ]
+dup_all_trait <- training_trait[duplicated(training_trait) | duplicated(training_trait, fromLast = TRUE), ]
+dup_all_trait
+
+sum(duplicated(training_trait))
+
+training_trait_clean <- training_trait[!duplicated(training_trait), ]
+```
+
+There are 45 unique sites. We can see that the variable date_harvested has 491 missing observations out of 164477. There are 8 duplicated rows in the entire dataset so we removed those duplicated rows. 
+
+```{r}
+
+head(training_meta)
+names(training_meta)
+```
+
+```{r}
+#Summary of the variables in the data
+summary(training_meta)
+
+# Number of distinct sites
+training_meta %>% distinct(site)
+
+#Missing values for variables 
+colSums(is.na(training_meta))
+```
+
+
+```{r}
+table(training_meta$year, training_meta$site)
+dup_rows_meta <- training_meta[duplicated(training_meta), ]
+dup_rows_meta
+dup_all_meta <- training_meta[duplicated(training_meta) | duplicated(training_meta, fromLast = TRUE), ]
+dup_all_meta
+sum(duplicated(training_meta))
+```
+
+The are 43 unique sites in training_meta dataset. And the variable previous_crop has 24 missing observations out of 256. 
+
+Some sites have duplicate observations. Each site year should have one row. We checked and found that following sites have duplicate observations.
+
+IAH1: 3 obs in 2014 (Duplicate = 2)
+MOH1: 2 obs in 2020 (Duplicate = 1)
+TXH1: 3 obs in 2017 (Duplicate = 2)
+
+Also, MOH1-rep1 and MOH1-rep 2 have same information. Can merge them as MOH1 and keep only 1? No because in training_soil we have seperate observations for MOH1_1 and MOH1_2. So, for uniformness we can rename MOH1_rep1 and MOH1_rep 2 to MOH1_1 and MOH1_2 respectively. 
+
+TXH1-Dry, TXH1-EArly and TXH1-Late have same values. Can we just take it as TXH1 and keep 1 observation for 1 site-year? Answer: Yes because they have the same latitude and longitude but once we get the daymet merged we should have all three entries as the training_trait has spearate observation for TXH1-Dry, TXH1-EArly and TXH1-Late.
+
+```{r}
+training_meta_clean$site[training_meta_clean$site %in% c("TXH1- Dry", "TXH1- Early", "TXH1- Late")] <- "TXH1"
+```
+
+
+Removing the duplicated rows
+
+```{r}
+training_meta_clean <- training_meta_clean[!duplicated(training_meta_clean), ] 
+```
+
+This did not remove the duplicated row for the site MOH1 in 2020 because the value for both entries are slightly different. But as the values are same to 2 decimal points, we will remove this duplicated row manually.
+
+```{r}
+training_meta_clean <- training_meta_clean %>% distinct(year, site, previous_crop, .keep_all = TRUE)
+```
+
+The sites MOH1_Rep1 and MOH1_Rep2 in 2018 will be renamed to MOH1_1 and MOH1_2 as it will match the training spoi sites MOH1_1 and MOH1_2 in year 2018.
+
+```{r}
+training_meta_clean$site[training_meta_clean$site == "MOH1_Rep1"] <- "MOH1_1"
+
+training_meta_clean$site[training_meta_clean$site == "MOH1_Rep2"] <- "MOH1_2"
+```
+
+Let's investigate the missing observations in the previous_crop
+```{r}
+table(training_meta_clean$previous_crop, useNA = "ifany")
+```
+Renaming some crops for uniformness
+```{r}
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop %in% c("2019/20 wheat", "wheat", "Winter wheat", "Winter Wheat")] <- "Wheat"
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop  %in% c("wheat and Double Crop soybean", "wheat/double crop soybean", "wheat/soybean")] <- "Wheat/Soybean"
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop == "cereal rye"] <- "Rye"
+
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop == "corn"] <- "Corn"
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop == "cotton"] <- "Cotton"
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop == "Fallow most of 2014 winter planted in fall of 2014 then sprayed with Glystar 24 floz/a on 5/3/15  and killed spring of 2015 spray"] <- "Fallow"
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop == "Lima beans followed by rye cover crop"] <- "Lima/Rye"
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop == "peanut"] <- "Peanut"
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop == "Small Grains and Double Crop soybean"] <- "Grains/Soybean"
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop == "sorghum"] <- "Sorghum"
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop %in% c("soybean", "Soybeans")] <- "Soybean"
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop == "soybeans with fall cereal rye cover"] <- "Soybean/Rye"
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop == "sugar beet"] <- "Sugarbeet"
+
+training_meta_clean$previous_crop[training_meta_clean$previous_crop == "soybean/pumpkin"] <- "Soybean/Pumpkin"
+
+```
+
+
+```{r}
+table(training_meta_clean$previous_crop, useNA = "ifany")
+```
+
+```{r}
+head(training_soil)
+names(training_soil)
+```
+
+```{r}
+#Summary of the variables in the data
+summary(training_soil)
+
+# Number of distinct sites
+training_soil %>% distinct(site)
+
+#Missing values for variables 
+colSums(is.na(training_soil))
+
+#Looking for duplicated rows
+dup_rows_soil <- training_soil[duplicated(training_soil), ]
+dup_rows_soil
+```
+
+There are no duplicated rows in training_soil dataset.
+
+```{r}
+training_soil_clean <- training_soil %>% 
+  separate(site, into = c("site", "years"), sep = -5) %>%
+  select(-years)
+
+training_soil_clean %>% distinct(site)
+```
+
+Training_soil dataset has 40 unique sites. We can also observe that variable soilpH has 2 missing observations and om_pct has 8 missing observations.
+
+## 2. Saving cleaned datasets. (training_trait_clean, training_meta_clean and training_soil_clean)
+```{r}
+write.csv(training_trait_clean, "../data/training/training_trait_clean.csv", row.names = FALSE)
+
+write.csv(training_meta_clean, "../data/training/training_meta_clean.csv", row.names = FALSE)
+
+write.csv(training_soil_clean, "../data/training/training_soil_clean.csv", row.names = FALSE)
+```
+
 
 # C. Open-source data  
 Notice you were provided with the **longitude and latitude** of most of the site-years.  
