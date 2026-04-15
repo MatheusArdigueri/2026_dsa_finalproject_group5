@@ -139,14 +139,14 @@ Also, MOH1-rep1 and MOH1-rep 2 have same information. Can merge them as MOH1 and
 TXH1-Dry, TXH1-EArly and TXH1-Late have same values. Can we just take it as TXH1 and keep 1 observation for 1 site-year? Answer: Yes because they have the same latitude and longitude but once we get the daymet merged we should have all three entries as the training_trait has spearate observation for TXH1-Dry, TXH1-EArly and TXH1-Late.
 
 ```{r}
-training_meta_clean$site[training_meta_clean$site %in% c("TXH1- Dry", "TXH1- Early", "TXH1- Late")] <- "TXH1"
+training_meta$site[training_meta$site %in% c("TXH1- Dry", "TXH1- Early", "TXH1- Late")] <- "TXH1"
 ```
 
 
 Removing the duplicated rows
 
 ```{r}
-training_meta_clean <- training_meta_clean[!duplicated(training_meta_clean), ] 
+training_meta_clean <- training_meta[!duplicated(training_meta), ] 
 ```
 
 This did not remove the duplicated row for the site MOH1 in 2020 because the value for both entries are slightly different. But as the values are same to 2 decimal points, we will remove this duplicated row manually.
