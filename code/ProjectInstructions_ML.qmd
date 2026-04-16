@@ -57,6 +57,7 @@ library(tidyverse)
 library(USAboundaries) # for US state boundaries
 library(sf) # for US map
 library(daymetr) # For opendata download
+library(lubridate)
 library(ggridges)
 ```
 Loading training and testing data
@@ -400,8 +401,23 @@ fe_month <- fieldweather %>%
 
 fe_month
 ```
+## 3. Growing Degree Days
 ```{r}
-fe_month_sum <- fe_month %>%
+fe_month2 <- fe_month %>%
+  mutate(
+    ATmax35 = pmin(tmax.c, 30),  # pmim function transform everything more than 30 in 30      (https://www.rdocumentation.org/packages/parttime/versions/0.1.2/topics/pmin)
+    daily_gdd = ((ATmax35 + tmin.c)/2 - 10), 
+    corn_daily_gdd = pmax(daily_gdd, 0), # Round to zero all the possible negative values.
+  cumulative_gdd = cumsum(corn_daily_gdd))
+
+
+fe_month2
+```
+
+
+```{r}
+fe_month_sum <- fe_month2 %>%
+  
   group_by(year, site, month_abb, previous_crop) %>%
   summarise(across(.cols = c(dayl.s,
                              srad.wm2,
@@ -412,7 +428,10 @@ fe_month_sum <- fe_month %>%
                    .names = "mean_{.col}"),
             across(.cols = prcp.mm,
                    .fns = sum,
-                   .names = "sum_{.col}")) %>%
+                   .names = "sum_{.col}"),
+            across(.cols = cumulative_gdd,
+                   .fns = sum,
+                   .names = "cum_{.col}")) %>%
   ungroup()
 
 
@@ -420,22 +439,21 @@ fe_month_sum
 ```
 ```{r}
 fe_month_sum_wide <- fe_month_sum %>%
-  pivot_longer(mean_dayl.s : sum_prcp.mm) %>%
+  pivot_longer(mean_dayl.s : cum_cumulative_gdd
+) %>%
   mutate(varname = paste0(name, "_", month_abb)) %>%
   dplyr::select(-name, -month_abb) %>%
   pivot_wider(names_from = varname, 
               values_from = value) %>%
   mutate(across(-c(year, site, previous_crop), ~ round(., 1))) #. Represent each one of the columns, ~ is just convention to use across and a function inside.
 
-  
-  
-names(fe_month_sum_wide)  
+fe_month_sum_wide 
 ```
 
-## 3. EDA of feat eng.
+## 4. EDA of feat eng.
 ```{r}
 finalplots <- fe_month_sum %>%
-  pivot_longer(mean_dayl.s:sum_prcp.mm) %>%
+  pivot_longer(mean_dayl.s:cum_cumulative_gdd) %>%
   group_by(name) %>%
   nest() %>%
   mutate(plot = map2(data, name,
@@ -454,12 +472,39 @@ finalplots <- fe_month_sum %>%
 finalplots$plot
 ```
 
-## 4. Exporting Feature Eng. Data
+## 5. Exporting Feature Eng. Data
 ```{r}
 write_csv(fe_month_sum_wide,
           "../data/training/training_meta_weather_monthsum.csv")
 ```
 
+## 6. Opening all data
+```{r}
+
+train_trait_dataset <-read_csv("../data/training/training_trait_clean.csv") %>%
+  mutate(date_planted = as.Date(date_planted, format = "%m/%d/%y"),
+         date_harvested = as.Date(date_harvested, format = "%m/%d/%y"))
+
+train_meta_dataset<-read_csv("../data/training/training_meta_weather_monthsum.csv")
+
+train_soil_dataset <-read_csv("../data/training/training_soil_clean.csv")
+```
+
+## 7. Joining data
+```{r}
+train_partial_dataset <- train_trait_dataset %>%
+  left_join(train_meta_dataset, by = c("site", "year"))
+
+train_full_dataset <- train_partial_dataset %>%
+  left_join(train_soil_dataset, by = c("site", "year"))
+
+train_full_dataset %>%
+  select(date_harvested) %>%
+  unique()
+```
+
+# Planting months were from March to June
+# Harvesting months were from August to December
 
 It is up to each team how you will perform feature engineering.  
 For ex. in class we summarized weather on a monthly basis, but perhaps this is not the best approach.  
