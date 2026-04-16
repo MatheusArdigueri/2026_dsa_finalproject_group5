@@ -284,8 +284,7 @@ met_filt <- training_meta_clean %>%
   filter(
     longitude >= -125 & longitude <= -70, 
     latitude >= 25 & latitude <= 50 # This will remove Europe location
-  ) %>%
-  filter(!site %in% c("ONH1", "ONH2")) # This will remove Canada location, since Lat and Long can match.
+  ) # This will remove Canada location, since Lat and Long can match.
 
 
 summary(met_filt)
@@ -374,7 +373,6 @@ Your goal is to create good predictor variables in your data set for modelling.
 ## 1. Reading open data
 ```{r}
 fieldweather <- read_csv("../data/training/training_meta_weather_clean.csv")
-
 head(fieldweather, 5)
 ```
 
@@ -502,6 +500,13 @@ train_full_dataset %>%
   select(date_harvested) %>%
   unique()
 ```
+
+## 8. Exporting Final Data
+```{r}
+write.csv(train_full_dataset,
+          file = "../data/training/train_full_dataset.csv")
+```
+
 
 # Planting months were from March to June
 # Harvesting months were from August to December
