@@ -46,11 +46,18 @@ Therefore, using the training data wisely to create predictive models will be im
 Loading necessary libraries
 
 ```{r}
+#| message: false
+#| warning: false
 library(readxl) # to read excel files
 library(janitor) # to clean data
 library(dplyr) # wrangling
 library(tidyr) # wrangling
 library(readr) # to export csv
+library(tidyverse) 
+library(USAboundaries) # for US state boundaries
+library(sf) # for US map
+library(daymetr) # For opendata download
+library(ggridges)
 ```
 Loading training and testing data
   
@@ -252,11 +259,207 @@ write.csv(training_soil_clean, "../data/training/training_soil_clean.csv", row.n
 Notice you were provided with the **longitude and latitude** of most of the site-years.  
 You are encouraged to use this information to pull any external open-source data sets like **weather**, or anything else you may find useful.  
 
+## 1. Opening clean data with latitude and longitude.
+```{r}
+training_meta_clean <- read_csv("../data/training/training_meta_clean.csv")
+
+head(training_meta_clean, 5)
+```
+##2. Explore locations distribution in US.
+```{r}
+states <- us_states() %>%
+  filter(!(state_abbr %in% c("PR","AK","HI")))
+
+ggplot() +
+  geom_sf(data = states) +
+  geom_point(data = training_meta_clean, aes(
+             x = longitude,
+             y = latitude,
+             color = site))
+```
+There are traits outside US, so lets remove them to download Daymet data properly, since trails experiment is inside US and daymet has good accuracy in US.
+```{r}
+met_filt <- training_meta_clean %>%
+  filter(
+    longitude >= -125 & longitude <= -70, 
+    latitude >= 25 & latitude <= 50 # This will remove Europe location
+  ) %>%
+  filter(!site %in% c("ONH1", "ONH2")) # This will remove Canada location, since Lat and Long can match.
+
+
+summary(met_filt)
+```
+```{r}
+states <- us_states() %>%
+  filter(!(state_abbr %in% c("PR","AK","HI")))
+
+ggplot() +
+  geom_sf(data = states) +
+  geom_point(data = met_filt, aes(
+             x = longitude,
+             y = latitude,
+             color = site))
+```
+```{r}
+met_filt %>% 
+  select(year) %>%
+  unique()
+```
+
+
+Now , with 37 locations inside US, lets download the open data.
+37 locations, 10 years.
+
+## 3. Downloading open data.
+```{r}
+names(met_filt)
+
+daymet_all <- met_filt %>%
+  mutate(weather = pmap(list(.y = year,
+                             .site = site,
+                             .lat = latitude,
+                             .lon = longitude),
+                        function(.y, .site, .lat, .lon) 
+                         download_daymet(site = .site,
+                                    lat = .lat,
+                                    lon = .lon,
+                                    start = .y,
+                                    end = .y,
+                                    silent = T,
+                                    simplify = T) %>%
+                          rename(.year = year,
+                                 .site = site)
+                        
+                        ))
+
+daymet_all$weather[1]
+
+daymet_all_2 <- daymet_all %>% # This will just rename lat and long to avoid complications with merged columns in the future
+  rename(lat = latitude,
+         long = longitude)
+
+```
+```{r}
+daymet_all_unnest <- daymet_all_2 %>%
+  unnest(weather) %>%
+  pivot_wider(names_from = measurement,
+              values_from = value) %>%
+  clean_names()
+
+daymet_all_unnest 
+```
+
+## 4. EDA of downloaded data
+```{r}
+daymet_all_unnest %>%
+  pivot_longer(cols = dayl_s:vp_pa) %>%
+  ggplot(aes(x = value)) +
+  geom_density() +
+  facet_wrap(~name, scales = "free")
+```
+## 5. Saving open data.
+```{r}
+write_csv(daymet_all_unnest,
+          file="../data/training/training_meta_weather_clean.csv")
+```
+
+
 This will be up to each team.
 Part of creating a great model is incorporating different pieces of information.  
 
 # D. Feature engineering  
 Your goal is to create good predictor variables in your data set for modelling.  
+
+## 1. Reading open data
+```{r}
+fieldweather <- read_csv("../data/training/training_meta_weather_clean.csv")
+
+head(fieldweather, 5)
+```
+
+## 2. Creating month info and analyzing basics
+```{r}
+fe_month <- fieldweather %>%
+  # Selecting needed variables
+  dplyr::select(year, site, lat, long,
+                previous_crop,
+                yday,
+                dayl.s = dayl_s, 
+                prcp.mm = prcp_mm_day,
+                srad.wm2 = srad_w_m_2, 
+                tmax.c = tmax_deg_c, 
+                tmin.c = tmin_deg_c,
+                vp.pa = vp_pa
+                ) %>%
+  # Creating a date class variable  
+  mutate(date_chr = paste0(year, "/", yday)) %>%
+  mutate( date = as.Date(date_chr, "%Y/%j")) %>%
+  # Extracting month from date  
+  mutate(month = month(date)) %>%
+  mutate(month_abb = month(date, label = T))
+
+fe_month
+```
+```{r}
+fe_month_sum <- fe_month %>%
+  group_by(year, site, month_abb, previous_crop) %>%
+  summarise(across(.cols = c(dayl.s,
+                             srad.wm2,
+                             tmax.c,
+                             tmin.c,
+                             vp.pa),
+                   .fns = mean,
+                   .names = "mean_{.col}"),
+            across(.cols = prcp.mm,
+                   .fns = sum,
+                   .names = "sum_{.col}")) %>%
+  ungroup()
+
+
+fe_month_sum
+```
+```{r}
+fe_month_sum_wide <- fe_month_sum %>%
+  pivot_longer(mean_dayl.s : sum_prcp.mm) %>%
+  mutate(varname = paste0(name, "_", month_abb)) %>%
+  dplyr::select(-name, -month_abb) %>%
+  pivot_wider(names_from = varname, 
+              values_from = value) %>%
+  mutate(across(-c(year, site, previous_crop), ~ round(., 1))) #. Represent each one of the columns, ~ is just convention to use across and a function inside.
+
+  
+  
+names(fe_month_sum_wide)  
+```
+
+## 3. EDA of feat eng.
+```{r}
+finalplots <- fe_month_sum %>%
+  pivot_longer(mean_dayl.s:sum_prcp.mm) %>%
+  group_by(name) %>%
+  nest() %>%
+  mutate(plot = map2(data, name,
+                     ~ggplot(data = .x,
+       aes(y = month_abb,
+           x = value,
+           fill = stat(x)
+           )) +
+  geom_density_ridges_gradient(scale = 3,
+                               rel_min_height = 0.01) +
+  scale_fill_viridis_c(option = "C", alpha = 0.5) +
+  theme(legend.position = "none") +
+  labs(x = .y)
+                       ))
+  
+finalplots$plot
+```
+
+## 4. Exporting Feature Eng. Data
+```{r}
+write_csv(fe_month_sum_wide,
+          "../data/training/training_meta_weather_monthsum.csv")
+```
+
 
 It is up to each team how you will perform feature engineering.  
 For ex. in class we summarized weather on a monthly basis, but perhaps this is not the best approach.  
