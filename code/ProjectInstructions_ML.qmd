@@ -470,12 +470,15 @@ write_csv(fe_month_sum_wide,
 train_trait_dataset <-read_csv("../data/training/training_trait_clean.csv") %>%
   mutate(
     date_planted   = as.Date(date_planted, format = "%m/%d/%Y"),
-    date_harvested = as.Date(date_harvested, format = "%m/%d/%Y")
-  )
+    date_harvested = as.Date(date_harvested, format = "%m/%d/%Y"))
+
 
 train_meta_dataset<-read_csv("../data/training/training_meta_weather_monthsum.csv")
 
+
+
 train_soil_dataset <-read_csv("../data/training/training_soil_clean.csv")
+
 ```
 
 ## 7. Joining data
