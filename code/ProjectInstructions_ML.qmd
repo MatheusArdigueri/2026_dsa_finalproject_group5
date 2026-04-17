@@ -148,6 +148,7 @@ TXH1-Dry, TXH1-EArly and TXH1-Late have same values. Can we just take it as TXH1
 
 ```{r}
 training_meta$site[training_meta$site %in% c("TXH1- Dry", "TXH1- Early", "TXH1- Late")] <- "TXH1"
+training_trait$site[training_trait$site %in% c("IAH1a", "IAH1b", "IAH1c")] <- "IAH1"
 ```
 
 
@@ -397,24 +398,11 @@ fe_month <- fieldweather %>%
   mutate(month = month(date)) %>%
   mutate(month_abb = month(date, label = T))
 
-fe_month
-```
-## 3. Growing Degree Days
-```{r}
-fe_month2 <- fe_month %>%
-  mutate(
-    ATmax35 = pmin(tmax.c, 30),  # pmim function transform everything more than 30 in 30      (https://www.rdocumentation.org/packages/parttime/versions/0.1.2/topics/pmin)
-    daily_gdd = ((ATmax35 + tmin.c)/2 - 10), 
-    corn_daily_gdd = pmax(daily_gdd, 0), # Round to zero all the possible negative values.
-  cumulative_gdd = cumsum(corn_daily_gdd))
-
-
-fe_month2
+names(fe_month)
 ```
 
-
 ```{r}
-fe_month_sum <- fe_month2 %>%
+fe_month_sum <- fe_month %>%
   
   group_by(year, site, month_abb, previous_crop) %>%
   summarise(across(.cols = c(dayl.s,
@@ -426,18 +414,17 @@ fe_month_sum <- fe_month2 %>%
                    .names = "mean_{.col}"),
             across(.cols = prcp.mm,
                    .fns = sum,
-                   .names = "sum_{.col}"),
-            across(.cols = cumulative_gdd,
-                   .fns = sum,
-                   .names = "cum_{.col}")) %>%
+                   .names = "sum_{.col}")) %>%
   ungroup()
 
 
 fe_month_sum
 ```
+
 ```{r}
 fe_month_sum_wide <- fe_month_sum %>%
-  pivot_longer(mean_dayl.s : cum_cumulative_gdd
+  pivot_longer(mean_dayl.s : sum_prcp.mm
+
 ) %>%
   mutate(varname = paste0(name, "_", month_abb)) %>%
   dplyr::select(-name, -month_abb) %>%
@@ -451,7 +438,8 @@ fe_month_sum_wide
 ## 4. EDA of feat eng.
 ```{r}
 finalplots <- fe_month_sum %>%
-  pivot_longer(mean_dayl.s:cum_cumulative_gdd) %>%
+  pivot_longer(mean_dayl.s:sum_prcp.mm
+) %>%
   group_by(name) %>%
   nest() %>%
   mutate(plot = map2(data, name,
@@ -480,8 +468,10 @@ write_csv(fe_month_sum_wide,
 ```{r}
 
 train_trait_dataset <-read_csv("../data/training/training_trait_clean.csv") %>%
-  mutate(date_planted = as.Date(date_planted, format = "%m/%d/%y"),
-         date_harvested = as.Date(date_harvested, format = "%m/%d/%y"))
+  mutate(
+    date_planted   = as.Date(date_planted, format = "%m/%d/%Y"),
+    date_harvested = as.Date(date_harvested, format = "%m/%d/%Y")
+  )
 
 train_meta_dataset<-read_csv("../data/training/training_meta_weather_monthsum.csv")
 
@@ -496,10 +486,10 @@ train_partial_dataset <- train_trait_dataset %>%
 train_full_dataset <- train_partial_dataset %>%
   left_join(train_soil_dataset, by = c("site", "year"))
 
-train_full_dataset %>%
-  select(date_harvested) %>%
-  unique()
 ```
+
+
+
 
 ## 8. Exporting Final Data
 ```{r}
