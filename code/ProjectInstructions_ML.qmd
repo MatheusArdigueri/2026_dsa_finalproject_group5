@@ -490,16 +490,14 @@ train_full_dataset <- train_partial_dataset %>%
   left_join(train_soil_dataset, by = c("site", "year"))
 
 ```
-
-
-
-
 ## 8. Exporting Final Data
 ```{r}
 write.csv(train_full_dataset,
           file = "../data/training/train_full_dataset.csv")
 ```
 
+
+## Final data with features engeneered and all datasets merged.
 
 # Planting months were from March to June
 # Harvesting months were from August to December
