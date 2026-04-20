@@ -712,6 +712,7 @@ ggplot() +
 b. Recipe
 ```{r}
 # Create recipe for data preprocessing
+
 weather_recipe <- recipe(yield_mg_ha ~ ., data = train_data) %>% 
   step_rm(n_plots, year, site, 
           hybrid, soilpH_missing,  
@@ -725,6 +726,7 @@ weather_recipe
 
 ```{r}
 # Prep the recipe to estimate any required statistics
+
 weather_prep <- weather_recipe %>% 
   prep()
 
@@ -809,7 +811,6 @@ xgb_res$.metrics[[2]]
 plot_race(xgb_res)
 ```
 
-
 ```{r}
 # Based on lowest RMSE
 best_rmse <- xgb_res %>% 
@@ -851,7 +852,6 @@ best_r2 <- xgb_res %>%
 
 best_r2
 ```
-
 
 ```{r}
 # Based on lowest R2 within 1% loss
@@ -900,7 +900,6 @@ final_spec <- boost_tree(
 final_spec
 ```
 
-
 ```{r}
 set.seed(10)
 
@@ -912,12 +911,10 @@ test_predictions <- final_fit %>% collect_predictions()
 test_predictions
 ```
 
-
 ```{r}
 final_fit %>%
   collect_metrics()
 ```
-
 
 ```{r}
 final_spec %>%
@@ -955,7 +952,7 @@ final_fit %>%
 ```{r}
 final_spec %>%
   fit(yield_mg_ha ~ .,
-         data = bake(weather_prep, train_data)) %>% #There little change in variable improtance if you use full dataset
+         data = bake(weather_prep, train_data)) %>% #There little change in variable importance if you use full dataset
     vi() %>%
   mutate(
     Variable = fct_reorder(Variable, 
