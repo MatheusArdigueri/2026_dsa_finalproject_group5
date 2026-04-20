@@ -59,9 +59,17 @@ library(sf) # for US map
 library(daymetr) # For opendata download
 library(lubridate)
 library(ggridges)
+library(tidymodels)   
+library(finetune)     
+library(vip)          # For plotting variable importance from fitted models
+library(xgboost)      # XGBoost implementation in R
+library(ranger)       # Fast implementation of Random Forests
+library(tidyverse)    # Data wrangling and visualization
+library(doParallel)   
 ```
-Loading training and testing data
-  
+
+Loading data 
+
 ```{r}
 training_trait <- read_csv("../data/training/training_trait.csv")
 training_meta <- read_csv("../data/training/training_meta.csv")
@@ -70,6 +78,8 @@ testing_submission <- read_csv("../data/testing/testing_submission.csv")
 testing_meta <- read_csv("../data/testing/testing_meta.csv")
 testing_soil <- read_csv("../data/testing/testing_soil.csv")
 ```
+
+Unique sites for each dataset
 
 ```{r}
 training_trait %>% distinct(site)
@@ -80,7 +90,7 @@ testing_meta %>% distinct(site)
 testing_soil %>% distinct(site)
 ```
 
-Inspecting the training_trait dataset
+Inspecting and cleaning the training_trait dataset
 
 ```{r}
 head(training_trait)
@@ -95,7 +105,7 @@ training_trait %>% distinct(site)
 #Missing values for variables 
 colSums(is.na(training_trait))
 
-# Checking for duplicated rows
+# Checking for duplicated rows 
 dup_rows_trait <- training_trait[duplicated(training_trait), ]
 dup_all_trait <- training_trait[duplicated(training_trait) | duplicated(training_trait, fromLast = TRUE), ]
 dup_all_trait
@@ -103,9 +113,23 @@ dup_all_trait
 sum(duplicated(training_trait))
 
 training_trait_clean <- training_trait[!duplicated(training_trait), ]
+
+#Creating two columns for site where site will be used for merging with other dataset and site_original will have the original sites for more information
+
+training_trait_clean <- training_trait_clean%>%
+  mutate(
+    site_original = site,
+    site = substr(site, 1, 4)
+  )
+
+training_trait_clean %>% distinct(site)
+
+training_trait_clean %>% distinct(site_original)
 ```
 
-There are 45 unique sites. We can see that the variable date_harvested has 491 missing observations out of 164477. There are 8 duplicated rows in the entire dataset so we removed those duplicated rows. 
+There are 45 unique sites. We can see that the variable date_harvested has 491 missing observations out of 164477. There are 8 duplicated rows in the entire dataset so we removed those duplicated rows. After this, there are 0 duplicated rows in training_trait dataset. 
+
+Cleaning training_meta dataset
 
 ```{r}
 
@@ -139,16 +163,18 @@ The are 43 unique sites in training_meta dataset. And the variable previous_crop
 Some sites have duplicate observations. Each site year should have one row. We checked and found that following sites have duplicate observations.
 
 IAH1: 3 obs in 2014 (Duplicate = 2)
-MOH1: 2 obs in 2020 (Duplicate = 1)
 TXH1: 3 obs in 2017 (Duplicate = 2)
+MOH1: 2 obs in 2020 (Duplicate = 1)
 
-Also, MOH1-rep1 and MOH1-rep 2 have same information. Can merge them as MOH1 and keep only 1? No because in training_soil we have seperate observations for MOH1_1 and MOH1_2. So, for uniformness we can rename MOH1_rep1 and MOH1_rep 2 to MOH1_1 and MOH1_2 respectively. 
+Also, MOH1-rep1 and MOH1-rep 2 have same information. Can merge them as MOH1 and keep only 1? Yes, because they have pretty close longitude and latitude values in the meta dataset which will have similar weather information. So for meta dataset we can do that but for trait dataset we do not do that.
 
-TXH1-Dry, TXH1-EArly and TXH1-Late have same values. Can we just take it as TXH1 and keep 1 observation for 1 site-year? Answer: Yes because they have the same latitude and longitude but once we get the daymet merged we should have all three entries as the training_trait has spearate observation for TXH1-Dry, TXH1-EArly and TXH1-Late.
+
+TXH1-Dry, TXH1-Early and TXH1-Late have same values. Can we just take it as TXH1 and keep 1 observation for 1 site-year? Answer: We can do for meta dataset for getting weather information. But for the trait and soil dataset, we should keep it as it is. Because in they have the same latitude and longitude but once we get the daymet merged we should have all three entries as the training_trait has separate observation for TXH1-Dry, TXH1-EArly and TXH1-Late.
 
 ```{r}
 training_meta$site[training_meta$site %in% c("TXH1- Dry", "TXH1- Early", "TXH1- Late")] <- "TXH1"
-training_trait$site[training_trait$site %in% c("IAH1a", "IAH1b", "IAH1c")] <- "IAH1"
+
+training_meta$site[training_meta$site %in% c("MOH1- rep 1", "MOH1- rep 2")] <- "MOH1"
 ```
 
 
@@ -164,19 +190,14 @@ This did not remove the duplicated row for the site MOH1 in 2020 because the val
 training_meta_clean <- training_meta_clean %>% distinct(year, site, previous_crop, .keep_all = TRUE)
 ```
 
-The sites MOH1_Rep1 and MOH1_Rep2 in 2018 will be renamed to MOH1_1 and MOH1_2 as it will match the training spoi sites MOH1_1 and MOH1_2 in year 2018.
-
-```{r}
-training_meta_clean$site[training_meta_clean$site == "MOH1_Rep1"] <- "MOH1_1"
-
-training_meta_clean$site[training_meta_clean$site == "MOH1_Rep2"] <- "MOH1_2"
-```
 
 Let's investigate the missing observations in the previous_crop
 ```{r}
 table(training_meta_clean$previous_crop, useNA = "ifany")
 ```
+
 Renaming some crops for uniformness
+
 ```{r}
 
 training_meta_clean$previous_crop[training_meta_clean$previous_crop %in% c("2019/20 wheat", "wheat", "Winter wheat", "Winter Wheat")] <- "Wheat"
@@ -242,7 +263,14 @@ training_soil_clean <- training_soil %>%
   separate(site, into = c("site", "years"), sep = -5) %>%
   select(-years)
 
-training_soil_clean %>% distinct(site)
+training_soil_clean <- training_soil_clean%>%
+  mutate(
+    site_original = site,
+    site = substr(site, 1, 4)
+  )
+
+training_trait_clean %>% distinct(site)
+
 ```
 
 Training_soil dataset has 40 unique sites. We can also observe that variable soilpH has 2 missing observations and om_pct has 8 missing observations.
@@ -266,7 +294,10 @@ You are encouraged to use this information to pull any external open-source data
 training_meta_clean <- read_csv("../data/training/training_meta_clean.csv")
 
 head(training_meta_clean, 5)
+
+training_meta_clean %>% distinct(site)
 ```
+
 ##2. Explore locations distribution in US.
 ```{r}
 states <- us_states() %>%
@@ -280,6 +311,7 @@ ggplot() +
              color = site))
 ```
 There are traits outside US, so lets remove them to download Daymet data properly, since trails experiment is inside US and daymet has good accuracy in US.
+
 ```{r}
 met_filt <- training_meta_clean %>%
   filter(
@@ -290,6 +322,7 @@ met_filt <- training_meta_clean %>%
 
 summary(met_filt)
 ```
+
 ```{r}
 states <- us_states() %>%
   filter(!(state_abbr %in% c("PR","AK","HI")))
@@ -301,6 +334,7 @@ ggplot() +
              y = latitude,
              color = site))
 ```
+
 ```{r}
 met_filt %>% 
   select(year) %>%
@@ -358,6 +392,7 @@ daymet_all_unnest %>%
   geom_density() +
   facet_wrap(~name, scales = "free")
 ```
+
 ## 5. Saving open data.
 ```{r}
 write_csv(daymet_all_unnest,
@@ -476,21 +511,46 @@ train_trait_dataset <-read_csv("../data/training/training_trait_clean.csv") %>%
 train_meta_dataset<-read_csv("../data/training/training_meta_weather_monthsum.csv")
 
 
-
 train_soil_dataset <-read_csv("../data/training/training_soil_clean.csv")
 
+#Training soil dataset had two observations for MOH1_1 and MOH1_2 in year 2018 and 2020 but in the training trait we do not have that. So we will aggregate the values of MOH1_1 and MOH1_2 into one MOH1 for year 2018 and 2020.
+
+train_soil_dataset <- train_soil_dataset %>%
+  group_by(site, year) %>%
+  summarise(
+    across(c(soilpH, om_pct, soilk_ppm, soilp_ppm), ~ mean(.x, na.rm = TRUE)),
+    .groups = "drop"
+  )
+
+train_meta_dataset %>% distinct(year)
+train_trait_dataset %>% distinct(year)
+train_soil_dataset %>% distinct(year)
 ```
 
-## 7. Joining data
+## 7 Aggregating the training_trait dataset to year-site level.
 ```{r}
-train_partial_dataset <- train_trait_dataset %>%
+train_trait_aggregated <- train_trait_dataset %>%
+  group_by(year, site, hybrid, site_original) %>%
+  summarise(
+    yield_mg_ha = mean(yield_mg_ha, na.rm = TRUE),
+    n_plots = n(),
+    .groups = "drop"
+  )
+
+head(train_trait_aggregated)
+```
+
+## 8. Joining data
+```{r}
+train_partial_dataset <- train_trait_aggregated %>%
   left_join(train_meta_dataset, by = c("site", "year"))
 
 train_full_dataset <- train_partial_dataset %>%
   left_join(train_soil_dataset, by = c("site", "year"))
 
 ```
-## 8. Exporting Final Data
+
+## 9. Exporting Final Data
 ```{r}
 write.csv(train_full_dataset,
           file = "../data/training/train_full_dataset.csv")
@@ -505,10 +565,406 @@ write.csv(train_full_dataset,
 It is up to each team how you will perform feature engineering.  
 For ex. in class we summarized weather on a monthly basis, but perhaps this is not the best approach.  
 
+##10 Final dataset inital checks for missingness and summaries 
+```{r}
+train_full_dataset <- read_csv("../data/training/train_full_dataset.csv")
+```
+
+```{r}
+colSums(is.na(train_full_dataset))
+```
+We see that for exactly 6127 observations, weather variables have missing observations. 
+
+```{r}
+#Site and years that have missing observations for weather variables
+train_full_dataset %>%
+  filter(is.na(mean_dayl.s_Jan)) %>%
+  distinct(year, site) %>%
+  arrange(year, site)
+```
+These are the site-years that werenot included in the training_meta dataset.
+
+Since all weather variables are absent we will drop those rows.
+
+```{r}
+train_model_dataset <- train_full_dataset %>%
+  filter(!is.na(mean_dayl.s_Jan)) 
+
+train_model_dataset <- train_model_dataset %>%
+  mutate(
+    previous_crop = if_else(is.na(previous_crop), "Unknown", previous_crop)
+  )
+
+colSums(is.na(train_model_dataset))
+
+```
+We can still see missing observation in soil-related variables 
+The dataset training_soil_dataset only has observations for year 2015 to 2023 but the meta and trait dataset has observations from 2014 to 2023. This means we will have missing values for soil variables for all observations of 2014 and also for some site years that were not in the soil dataset. Since the soil-related variables should be kind of same for the same site, we will impute the missing observations.
+
+```{r}
+train_model_dataset <- train_model_dataset %>%
+  mutate(
+    soilpH_missing = if_else(is.na(soilpH), 1, 0),
+    om_pct_missing = if_else(is.na(om_pct), 1, 0),
+    soilk_ppm_missing = if_else(is.na(soilk_ppm), 1, 0),
+    soilp_ppm_missing = if_else(is.na(soilp_ppm), 1, 0)
+  )
+```
+
+Mean of soil variables for unique sites
+
+
+```{r}
+site_soil_means <- train_soil_dataset %>%
+  group_by(site) %>%
+  summarise(
+    soilpH_site_mean = mean(soilpH, na.rm = TRUE),
+    om_pct_site_mean = mean(om_pct, na.rm = TRUE),
+    soilk_ppm_site_mean = mean(soilk_ppm, na.rm = TRUE),
+    soilp_ppm_site_mean = mean(soilp_ppm, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+For sites with no observations, we will replace the missing values with the overall median.
+
+```{r}
+train_model_dataset <- train_model_dataset %>%
+  left_join(site_soil_means, by = "site") %>%
+  mutate(
+    soilpH = coalesce(soilpH, soilpH_site_mean, median(train_soil_dataset$soilpH, na.rm = TRUE)),
+    om_pct = coalesce(om_pct, om_pct_site_mean, median(train_soil_dataset$om_pct, na.rm = TRUE)),
+    soilk_ppm = coalesce(soilk_ppm, soilk_ppm_site_mean, median(train_soil_dataset$soilk_ppm, na.rm = TRUE)),
+    soilp_ppm = coalesce(soilp_ppm, soilp_ppm_site_mean, median(train_soil_dataset$soilp_ppm, na.rm = TRUE))
+  ) %>%
+  select(-ends_with("_site_mean"))
+
+colSums(is.na(train_model_dataset))
+```
+
+```{r}
+glimpse(train_model_dataset)
+names(train_model_dataset)
+```
+
+```{r}
+train_model_dataset %>%
+  summarise(
+    n_sites = n_distinct(site),
+    n_site_original = n_distinct(site_original),
+    n_hybrids = n_distinct(hybrid),
+    n_previous_crop = n_distinct(previous_crop)
+  )
+```
+```{r}
+train_model_dataset <- train_model_dataset %>%
+  separate(hybrid, into = c("parent1", "parent2"), sep = "/", remove = FALSE)
+```
+
 
 # E. Modeling strategies  
 You are asked to fully train two different machine learning models:  
   - XGboost (everyone)  
+
+
+1. Pre-processing
+
+```{r}
+library(tidymodels)
+```
+
+
+a. Splitting
+
+```{r}
+set.seed(931735)
+train_data <- train_model_dataset %>%
+  filter(year <= 2022)
+
+valid_data <- train_model_dataset %>%
+  filter(year == 2023)
+```
+
+
+```{r}
+data_split <- make_splits(
+  list(analysis = train_data, assessment = valid_data), data = train_model_dataset
+)
+
+data_split
+```
+
+Distribution of outcome variable (yield_mg_ha)
+
+```{r}
+ggplot() +
+  geom_density(data = train_data, 
+               aes(x = yield_mg_ha),
+               color = "red") +
+  geom_density(data = valid_data, 
+               aes(x = yield_mg_ha),
+               color = "blue")+
+  labs(x = "Yield (mg/ha)",
+       y = "Density",
+       title = "Distribution of yield in training and test data")
+```
+
+b. Recipe
+```{r}
+# Create recipe for data preprocessing
+weather_recipe <- recipe(yield_mg_ha ~ ., data = train_data) %>% 
+  step_rm(n_plots, year, site, hybrid, soilpH_missing,  om_pct_missing,soilk_ppm_missing, soilp_ppm_missing, parent1, parent2, site_original, previous_crop)
+    
+weather_recipe
+```
+
+
+```{r}
+# Prep the recipe to estimate any required statistics
+weather_prep <- weather_recipe %>% 
+  prep()
+
+# Examine preprocessing steps
+weather_prep
+```
+
+```{r}
+xgb_spec <- #Specifying XgBoost as our model type, asking to tune the hyperparameters
+  boost_tree(
+   # Total number of boosting iterations: tune() optimizes number of tree
+    trees = tune(),
+         # Maximum depth of each tree
+    tree_depth = tune(),
+             # Minimum samples required to split a node
+    min_n = tune(),
+        # Step size shrinkage for each boosting step
+    learn_rate = tune()
+    ) %>%
+        #specify engine 
+  set_engine("xgboost") %>%
+        # Set to mode
+  set_mode("regression")
+
+xgb_spec
+
+```
+
+```{r}
+set.seed(235) #34549
+resampling_foldcv <- vfold_cv(train_data, # Create 10-fold cross-validation resampling object from training data
+                              v = 10)
+
+resampling_foldcv
+resampling_foldcv$splits[[1]]
+```
+
+```{r}
+set.seed(123)
+xgb_grid <- grid_latin_hypercube(
+  tree_depth(),
+  min_n(),
+  learn_rate(),
+  trees(),
+  size = 50 #It will create 100 combinations of these hyperparameters
+  
+)
+
+xgb_grid
+
+```
+
+
+```{r}
+ggplot(data = xgb_grid,
+       aes(x = tree_depth, 
+           y = min_n)) +
+  geom_point(aes(color = factor(learn_rate),
+                 size = trees),
+             alpha = .5,
+             show.legend = FALSE)+
+  +
+  labs(title = "Hyperparameter grid")
+```
+
+```{r}
+set.seed(76544)
+registerDoParallel(cores = parallel::detectCores() - 1)
+
+xgb_res <- tune_race_anova(object = xgb_spec,
+                      preprocessor = weather_recipe,
+                      resamples = resampling_foldcv,
+                      grid = xgb_grid,
+                      control = control_race(save_pred = TRUE))
+stopImplicitCluster()
+
+beepr::beep()
+xgb_res$.metrics[[2]]
+```
+
+```{r}
+plot_race(xgb_res)
+```
+
+
+```{r}
+# Based on lowest RMSE
+best_rmse <- xgb_res %>% 
+  select_best(metric = "rmse")%>% 
+  mutate(source = "best_rmse")
+
+best_rmse
+```
+
+```{r}
+# Based on lowers RMSE within 1% loss
+best_rmse_pct_loss <- xgb_res %>% 
+  select_by_pct_loss("min_n",
+                     metric = "rmse",
+                     limit = 1
+                     )%>% 
+  mutate(source = "best_rmse_pct_loss")
+
+best_rmse_pct_loss
+```
+
+```{r}
+# Based on lowest RMSE within 1 se
+best_rmse_one_std_err <- xgb_res %>% 
+  select_by_one_std_err(metric = "rmse",
+                        eval_time = 100,
+                        trees
+                        )%>% 
+  mutate(source = "best_rmse_one_std_err")
+
+best_rmse_one_std_err
+```
+
+```{r}
+# Based on greatest R2
+best_r2 <- xgb_res %>% 
+  select_best(metric = "rsq")%>% 
+  mutate(source = "best_r2")
+
+best_r2
+```
+
+
+```{r}
+# Based on lowest R2 within 1% loss
+best_r2_pct_loss <- xgb_res %>% 
+  select_by_pct_loss("min_n",
+                     metric = "rsq",
+                     limit = 1
+                     ) %>% 
+  mutate(source = "best_r2_pct_loss")
+
+best_r2_pct_loss
+```
+
+```{r}
+# Based on lowest R2 within 1 se
+best_r2_one_std_error <- xgb_res %>% 
+  select_by_one_std_err(metric = "rsq",
+                        eval_time = 100,
+                        trees
+                        ) %>%
+  mutate(source = "best_r2_one_std_error")
+
+best_r2_one_std_error
+```
+
+```{r}
+best_rmse %>% 
+  bind_rows(best_rmse_pct_loss, 
+            best_rmse_one_std_err, 
+            best_r2, 
+            best_r2_pct_loss, 
+            best_r2_one_std_error) %>%
+  dplyr::select(source, everything())
+```
+
+```{r}
+final_spec <- boost_tree(
+  trees = best_r2$trees,           # Number of boosting rounds (trees)
+  tree_depth = best_r2$tree_depth, # Maximum depth of each tree
+  min_n = best_r2$min_n,           # Minimum number of samples to split a node
+  learn_rate = best_r2$learn_rate  # Learning rate (step size shrinkage)
+) %>%
+  set_engine("xgboost") %>%
+  set_mode("regression")
+
+final_spec
+```
+
+
+```{r}
+set.seed(10)
+
+final_fit <- last_fit(final_spec,
+                      preprocessor = weather_recipe, split = data_split)
+
+test_predictions <- final_fit %>% collect_predictions()
+
+test_predictions
+```
+
+
+```{r}
+final_fit %>%
+  collect_metrics()
+```
+
+
+```{r}
+final_spec %>%
+  fit(yield_mg_ha ~ .,
+      data = bake(weather_prep, 
+                 train_data)) %>%
+  augment(new_data = bake(weather_prep, 
+                          train_data)) %>% 
+  rmse(yield_mg_ha, .pred) %>%
+  bind_rows(
+    
+    
+# R2
+final_spec %>%
+  fit(yield_mg_ha ~ .,
+      data = bake(weather_prep, 
+                  train_data)) %>%
+  augment(new_data = bake(weather_prep, 
+                          train_data)) %>% 
+  rsq(yield_mg_ha, .pred))
+```
+
+```{r}
+final_fit %>%
+  collect_predictions() %>%
+  ggplot(aes(x = yield_mg_ha,
+             y = .pred)) +
+  geom_point() +
+  geom_abline() +
+  geom_smooth(method = "lm") +
+  scale_x_continuous(limits = c(20, 40)) +
+  scale_y_continuous(limits = c(20, 40)) 
+```
+
+```{r}
+final_spec %>%
+  fit(yield_mg_ha ~ .,
+         data = bake(weather_prep, train_data)) %>% #There little change in variable improtance if you use full dataset
+    vi() %>%
+  mutate(
+    Variable = fct_reorder(Variable, 
+                           Importance)
+  ) %>%
+  ggplot(aes(x = Importance, 
+             y = Variable)) +
+  geom_col() +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(y = NULL)
+```
+
+
   - **One more model of your choice not used in class**.  
 
 You can find a list of all tydymodels supported models here:  
