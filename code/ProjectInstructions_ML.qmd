@@ -713,7 +713,11 @@ b. Recipe
 ```{r}
 # Create recipe for data preprocessing
 weather_recipe <- recipe(yield_mg_ha ~ ., data = train_data) %>% 
-  step_rm(n_plots, year, site, hybrid, soilpH_missing,  om_pct_missing,soilk_ppm_missing, soilp_ppm_missing, parent1, parent2, site_original, previous_crop)
+  step_rm(n_plots, year, site, 
+          hybrid, soilpH_missing,  
+          om_pct_missing,soilk_ppm_missing, soilp_ppm_missing, 
+          parent1, parent2, 
+          site_original, previous_crop)
     
 weather_recipe
 ```
@@ -782,7 +786,6 @@ ggplot(data = xgb_grid,
                  size = trees),
              alpha = .5,
              show.legend = FALSE)+
-  +
   labs(title = "Hyperparameter grid")
 ```
 
@@ -798,6 +801,7 @@ xgb_res <- tune_race_anova(object = xgb_spec,
 stopImplicitCluster()
 
 beepr::beep()
+
 xgb_res$.metrics[[2]]
 ```
 
