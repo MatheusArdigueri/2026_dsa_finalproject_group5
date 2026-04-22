@@ -284,6 +284,97 @@ write.csv(training_meta_clean, "../data/training/training_meta_clean.csv", row.n
 write.csv(training_soil_clean, "../data/training/training_soil_clean.csv", row.names = FALSE)
 ```
 
+##3. Cleaning the raw testing datasets (testing)
+
+###i Testing Meta
+
+```{r}
+#Summary of the variables in the data
+summary(testing_meta)
+
+# Number of distinct sites
+testing_meta %>% distinct(site)
+
+#Missing values for variables 
+colSums(is.na(testing_meta))
+
+#Looking for duplicated rows
+dup_rows_meta <- testing_meta[duplicated(testing_meta), ]
+dup_rows_meta
+```
+
+There is one missing observation for the variable previous_crop and there is no duplicated rows. There are 23 distinct sites.
+
+```{r}
+table(testing_meta$previous_crop, useNA = "ifany")
+```
+
+```{r}
+testing_meta$previous_crop[testing_meta$previous_crop %in% c("soybean", "Soybean")] <- "Soybean"
+
+testing_meta_clean <- testing_meta %>%
+  mutate(
+    previous_crop = if_else(is.na(previous_crop), "Unknown", previous_crop)
+  )
+```
+
+###ii Testing Soil
+
+```{r}
+#Summary of the variables in the data
+summary(testing_soil)
+
+# Number of distinct sites
+testing_soil %>% distinct(site)
+
+#Missing values for variables 
+colSums(is.na(testing_soil))
+
+#Looking for duplicated rows
+dup_rows_soil <- testing_soil[duplicated(testing_soil), ]
+dup_rows_soil
+```
+
+Testing soil dataset has 16 distinct sites and no missing values and no duplicated rows. 
+
+```{r}
+testing_soil_clean <- testing_soil %>% 
+  separate(site, into = c("site", "years"), sep = -5) %>%
+  select(-years)
+
+```
+
+###iii Testing Submission
+
+```{r}
+#Summary of the variables in the data
+summary(testing_submission)
+
+# Number of distinct sites
+testing_submission %>% distinct(site)
+
+#Missing values for variables 
+colSums(is.na(testing_submission))
+
+#Looking for duplicated rows
+dup_rows_submission <- testing_submission[duplicated(testing_submission), ]
+dup_rows_submission
+
+testing_submission_clean <- testing_submission
+```
+
+There are 23 distinct sites in the testing submission dataset and there are no duplicated rows.
+
+## 4. Saving cleaned testing datasets
+
+```{r}
+write.csv(testing_submission_clean, "../data/testing/testing_submission_clean.csv", row.names = FALSE)
+
+write.csv(testing_meta_clean, "../data/testing/testing_meta_clean.csv", row.names = FALSE)
+
+write.csv(testing_soil_clean, "../data/testing/testing_soil_clean.csv", row.names = FALSE)
+```
+
 
 # C. Open-source data  
 Notice you were provided with the **longitude and latitude** of most of the site-years.  
