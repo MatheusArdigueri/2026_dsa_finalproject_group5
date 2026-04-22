@@ -382,11 +382,11 @@ You are encouraged to use this information to pull any external open-source data
 
 ## 1. Opening clean data with latitude and longitude.
 ```{r}
-training_meta_clean <- read_csv("../data/training/training_meta_clean.csv")
+testing_meta_clean <- read_csv("../data/testing/testing_meta_clean.csv")
 
-head(training_meta_clean, 5)
+head(testing_meta_clean, 5)
 
-training_meta_clean %>% distinct(site)
+testing_meta_clean %>% distinct(site)
 ```
 
 ##2. Explore locations distribution in US.
@@ -396,7 +396,7 @@ states <- us_states() %>%
 
 ggplot() +
   geom_sf(data = states) +
-  geom_point(data = training_meta_clean, aes(
+  geom_point(data = testing_meta_clean, aes(
              x = longitude,
              y = latitude,
              color = site))
@@ -404,12 +404,11 @@ ggplot() +
 There are traits outside US, so lets remove them to download Daymet data properly, since trails experiment is inside US and daymet has good accuracy in US.
 
 ```{r}
-met_filt <- training_meta_clean %>%
+met_filt <- testing_meta_clean %>%
   filter(
     longitude >= -125 & longitude <= -70, 
     latitude >= 25 & latitude <= 50 # This will remove Europe location
-  ) # This will remove Canada location, since Lat and Long can match.
-
+)
 
 summary(met_filt)
 ```
@@ -487,7 +486,7 @@ daymet_all_unnest %>%
 ## 5. Saving open data.
 ```{r}
 write_csv(daymet_all_unnest,
-          file="../data/training/training_meta_weather_clean.csv")
+          file="../data/testing//testing_meta_weather_clean.csv")
 ```
 
 
@@ -499,7 +498,7 @@ Your goal is to create good predictor variables in your data set for modelling.
 
 ## 1. Reading open data
 ```{r}
-fieldweather <- read_csv("../data/training/training_meta_weather_clean.csv")
+fieldweather <- read_csv("../data/testing/testing_meta_weather_clean.csv")
 head(fieldweather, 5)
 ```
 
@@ -587,22 +586,21 @@ finalplots$plot
 ## 5. Exporting Feature Eng. Data
 ```{r}
 write_csv(fe_month_sum_wide,
-          "../data/training/training_meta_weather_monthsum.csv")
+          "../data/testing/testing_meta_weather_monthsum.csv")
 ```
 
 ## 6. Opening all data
 ```{r}
 
-train_trait_dataset <-read_csv("../data/training/training_trait_clean.csv") %>%
-  mutate(
-    date_planted   = as.Date(date_planted, format = "%m/%d/%Y"),
-    date_harvested = as.Date(date_harvested, format = "%m/%d/%Y"))
+test_trait_dataset <-read_csv("../data/testing/testing_submission_clean.csv")
 
 
-train_meta_dataset<-read_csv("../data/training/training_meta_weather_monthsum.csv")
+test_meta_dataset<-read_csv("../data/testing/testing_meta_weather_monthsum.csv")
 
 
-train_soil_dataset <-read_csv("../data/training/training_soil_clean.csv")
+test_soil_dataset <-read_csv("../data/testing/testing_soil_clean.csv")
+
+test_meta_weathe
 
 #Training soil dataset had two observations for MOH1_1 and MOH1_2 in year 2018 and 2020 but in the training trait we do not have that. So we will aggregate the values of MOH1_1 and MOH1_2 into one MOH1 for year 2018 and 2020.
 
@@ -633,18 +631,18 @@ head(train_trait_aggregated)
 
 ## 8. Joining data
 ```{r}
-train_partial_dataset <- train_trait_aggregated %>%
-  left_join(train_meta_dataset, by = c("site", "year"))
+test_partial_dataset <- test_trait_dataset %>%
+  left_join(test_meta_dataset, by = c("site", "year"))
 
-train_full_dataset <- train_partial_dataset %>%
-  left_join(train_soil_dataset, by = c("site", "year"))
+train_full_dataset <- test_partial_dataset %>%
+  left_join(test_soil_dataset, by = c("site", "year"))
 
 ```
 
 ## 9. Exporting Final Data
 ```{r}
 write.csv(train_full_dataset,
-          file = "../data/training/train_full_dataset.csv")
+          file = "../data/testing/test_full_dataset.csv")
 ```
 
 
