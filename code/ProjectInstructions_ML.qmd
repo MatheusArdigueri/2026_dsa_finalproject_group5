@@ -378,7 +378,23 @@ write.csv(testing_soil_clean, "../data/testing/testing_soil_clean.csv", row.name
 
 # C. Open-source data  
 Notice you were provided with the **longitude and latitude** of most of the site-years.  
-You are encouraged to use this information to pull any external open-source data sets like **weather**, or anything else you may find useful.  
+You are encouraged to use this information to pull any external open-source data sets like **weather**, or anything else you may find useful. 
+
+> Daymet provides long-term, continuous, gridded estimates of daily weather and climatology variables by interpolating and extrapolating ground-based observations through statistical modeling techniques.  
+
+Data characteristics:    
+  - Spatial extent: North America (US, CAN, MEX)  
+  - Spatial resolution: **1 km**  
+  - Temporal resolution: **daily**  
+  - Temporal extent: **1980 to most recent full calendar year**  
+  - Variables included:  
+    - day length (secs/day)    
+    - precipitation (mm/day)  
+    - shortwave radiation (W/m2)  
+    - snow water equivalent (kg/m2)  
+    - maximum air temperature (C)  
+    - minimum air temperature (C)  
+    - water vapor pressure (Pa)  
 
 ## 1. Opening clean data with latitude and longitude.
 ```{r}
@@ -486,7 +502,7 @@ daymet_all_unnest %>%
 ## 5. Saving open data.
 ```{r}
 write_csv(daymet_all_unnest,
-          file="../data/testing//testing_meta_weather_clean.csv")
+          file="../data/testing/testing_meta_weather_clean.csv")
 ```
 
 
@@ -498,7 +514,7 @@ Your goal is to create good predictor variables in your data set for modelling.
 
 ## 1. Reading open data
 ```{r}
-fieldweather <- read_csv("../data/testing/testing_meta_weather_clean.csv")
+fieldweather <- read_csv("../data/training/training_meta_weather_clean.csv")
 head(fieldweather, 5)
 ```
 
@@ -526,25 +542,89 @@ fe_month <- fieldweather %>%
 names(fe_month)
 ```
 
+Getting the information for planting and harvesting date
+
 ```{r}
-fe_month_sum <- fe_month %>%
-  
-  group_by(year, site, month_abb, previous_crop) %>%
-  summarise(across(.cols = c(dayl.s,
-                             srad.wm2,
-                             tmax.c,
-                             tmin.c,
-                             vp.pa),
-                   .fns = mean,
-                   .names = "mean_{.col}"),
-            across(.cols = prcp.mm,
-                   .fns = sum,
-                   .names = "sum_{.col}")) %>%
-  ungroup()
-
-
-fe_month_sum
+training_trait_clean <- read_csv("../data/training/training_trait_clean.csv")
 ```
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+
+# 1. Converting planting/harvest dates as date format in trait data and getting the time frame between planting date and harvesting date.
+
+trait_windows <- training_trait_clean %>%
+  mutate(
+    date_planted = as.Date(date_planted, format = "%m/%d/%y"),
+    date_harvested = as.Date(date_harvested, format = "%m/%d/%y")
+  ) %>%
+  select(year, site, hybrid, date_planted, date_harvested) %>%
+  distinct()
+
+# 3. Join daily weather to each hybrid-specific planting-harvest window
+
+weather_daily <- trait_windows %>%
+  left_join(fe_month, by = c("site", "year"), relationship = "many-to-many") %>%
+  filter(date >= date_planted, date <= date_harvested) %>%
+  mutate(
+    days_after_planting = as.numeric(date - date_planted),
+    days_before_harvest = as.numeric(date_harvested - date),
+    window = case_when(
+      days_after_planting >= 0  & days_after_planting <= 30 ~ "dap_0_30",
+      days_after_planting >= 31 & days_after_planting <= 60 ~ "dap_31_60",
+      days_after_planting >= 61 & days_after_planting <= 90 ~ "dap_61_90",
+      days_before_harvest >= 0  & days_before_harvest <= 29 ~ "last30_preharvest",
+      TRUE ~ NA_character_
+    )
+  )
+
+weather_daily <- weather_daily %>%
+  mutate(
+    tmean = (tmax.c + tmin.c) / 2,
+    gdd = pmax(pmin(tmean, 30) - 10, 0),
+    hot_day_30 = as.integer(tmax.c > 30)
+  )
+
+# 4. Summarise within each time window
+
+fe_window_sum <- weather_daily %>%
+  filter(!is.na(window)) %>%
+  group_by(year, site, hybrid, window, previous_crop) %>%
+  summarise(
+  n_days = n(),
+    prcp_total = sum(prcp.mm, na.rm = TRUE),
+    tmax_mean = mean(tmax.c, na.rm = TRUE),
+    tmin_mean = mean(tmin.c, na.rm = TRUE),
+    tmean_mean = mean(tmean, na.rm = TRUE),
+    gdd_total = sum(gdd, na.rm = TRUE),
+    hot_days_30 = sum(hot_day_30, na.rm = TRUE),
+    vp_mean = mean(vp.pa, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+fe_window_sum
+```
+
+```{r}
+fe_window_sum_wide <- fe_window_sum %>%
+  pivot_wider(
+    names_from = window,
+    values_from = c(
+      n_days,
+      prcp_total,
+      tmax_mean,
+      tmin_mean,
+      tmean_mean,
+      gdd_total,
+      hot_days_30,
+      vp_mean
+    ))
+fe_window_sum_wide
+```
+
+
 
 ```{r}
 fe_month_sum_wide <- fe_month_sum %>%
@@ -589,18 +669,25 @@ write_csv(fe_month_sum_wide,
           "../data/testing/testing_meta_weather_monthsum.csv")
 ```
 
+### i Saving the weather data based on days after planting and before harvesting time window
+
+```{r}
+write_csv(fe_window_sum_wide,
+          "../data/training/training_meta_weather_window_sum.csv")
+```
+
+
 ## 6. Opening all data
 ```{r}
 
-test_trait_dataset <-read_csv("../data/testing/testing_submission_clean.csv")
+train_trait_dataset <-read_csv("../data/training/training_trait_clean.csv")
 
 
-test_meta_dataset<-read_csv("../data/testing/testing_meta_weather_monthsum.csv")
+train_meta_dataset<-read_csv("../data/training/training_meta_weather_window_sum.csv")
 
 
-test_soil_dataset <-read_csv("../data/testing/testing_soil_clean.csv")
+train_soil_dataset <-read_csv("../data/training/training_soil_clean.csv")
 
-test_meta_weathe
 
 #Training soil dataset had two observations for MOH1_1 and MOH1_2 in year 2018 and 2020 but in the training trait we do not have that. So we will aggregate the values of MOH1_1 and MOH1_2 into one MOH1 for year 2018 and 2020.
 
@@ -631,18 +718,18 @@ head(train_trait_aggregated)
 
 ## 8. Joining data
 ```{r}
-test_partial_dataset <- test_trait_dataset %>%
-  left_join(test_meta_dataset, by = c("site", "year"))
+train_partial_window_dataset <- train_trait_aggregated %>%
+  left_join(train_meta_dataset, by = c("site", "year", "hybrid"))
 
-train_full_dataset <- test_partial_dataset %>%
-  left_join(test_soil_dataset, by = c("site", "year"))
+train_full_window_dataset <- train_partial_window_dataset %>%
+  left_join(train_soil_dataset, by = c("site", "year"), relationship = "many-to-many")
 
 ```
 
 ## 9. Exporting Final Data
 ```{r}
-write.csv(train_full_dataset,
-          file = "../data/testing/test_full_dataset.csv")
+write.csv(train_full_window_dataset,
+          file = "../data/training/train_full_window_dataset.csv")
 ```
 
 
@@ -656,7 +743,7 @@ For ex. in class we summarized weather on a monthly basis, but perhaps this is n
 
 ##10 Final dataset inital checks for missingness and summaries 
 ```{r}
-train_full_dataset <- read_csv("../data/training/train_full_dataset.csv")
+train_full_dataset <- read_csv("../data/training/train_full_window_dataset.csv")
 ```
 
 ```{r}
@@ -667,17 +754,17 @@ We see that for exactly 6127 observations, weather variables have missing observ
 ```{r}
 #Site and years that have missing observations for weather variables
 train_full_dataset %>%
-  filter(is.na(mean_dayl.s_Jan)) %>%
+  filter(is.na(prcp_total_dap_0_30)) %>%
   distinct(year, site) %>%
   arrange(year, site)
 ```
-These are the site-years that werenot included in the training_meta dataset.
+These are the site-years that were not included in the training_meta dataset.
 
 Since all weather variables are absent we will drop those rows.
 
 ```{r}
 train_model_dataset <- train_full_dataset %>%
-  filter(!is.na(mean_dayl.s_Jan)) 
+  filter(!is.na(prcp_total_dap_0_30)) 
 
 train_model_dataset <- train_model_dataset %>%
   mutate(
@@ -687,8 +774,9 @@ train_model_dataset <- train_model_dataset %>%
 colSums(is.na(train_model_dataset))
 
 ```
-We can still see missing observation in soil-related variables 
-The dataset training_soil_dataset only has observations for year 2015 to 2023 but the meta and trait dataset has observations from 2014 to 2023. This means we will have missing values for soil variables for all observations of 2014 and also for some site years that were not in the soil dataset. Since the soil-related variables should be kind of same for the same site, we will impute the missing observations.
+
+We can still see missing observation in soil-related variables.
+The dataset training_soil_dataset only has observations for year 2015 to 2023 but the meta and trait dataset has observations from 2014 to 2023. This means we will have missing values for soil variables for all observations of 2014 and also for some site years that were not in the soil dataset. Since the soil-related variables should be kind of same for the same site, we will impute the missing observations assuming that these variables are quite similar for same site across years.
 
 ```{r}
 train_model_dataset <- train_model_dataset %>%
@@ -745,9 +833,30 @@ train_model_dataset %>%
     n_previous_crop = n_distinct(previous_crop)
   )
 ```
+
 ```{r}
-train_model_dataset <- train_model_dataset %>%
-  separate(hybrid, into = c("parent1", "parent2"), sep = "/", remove = FALSE)
+train_model_dataset$inbred <- sub("/.*", "", train_model_dataset$hybrid)
+
+train_model_dataset$inbred <- as.factor(train_model_dataset$inbred)
+
+```
+
+```{r}
+train_model_ready <- train_model_dataset %>%
+  select(-`...1`, -site_original, -Inbred, -n_days_dap_0_30, -n_days_dap_31_60, -n_days_dap_61_90, -n_days_last30_preharvest, -soilpH_missing, -om_pct_missing, -soilk_ppm_missing, -soilp_ppm_missing) %>%
+  mutate(
+    site = factor(site),
+    hybrid = factor(hybrid),
+    inbred = factor(inbred),
+    previous_crop = factor(previous_crop)
+  )
+```
+
+### i Saving the final training dataset
+
+```{r}
+write.csv(train_model_ready,
+          file = "../data/training/train_model_ready.csv")
 ```
 
 
@@ -767,18 +876,19 @@ a. Splitting
 
 ```{r}
 set.seed(931735)
-train_data <- train_model_dataset %>%
+train_data <- train_model_ready %>%
   filter(year <= 2022)
 
-valid_data <- train_model_dataset %>%
+valid_data <- train_model_ready %>%
   filter(year == 2023)
 ```
 
 
 ```{r}
 data_split <- make_splits(
-  list(analysis = train_data, assessment = valid_data), data = train_model_dataset
-)
+  list(analysis = which(train_model_ready$year <= 2022),
+       assessment = which(train_model_ready$year == 2023)
+), data = train_model_ready)
 
 data_split
 ```
@@ -801,13 +911,11 @@ ggplot() +
 b. Recipe
 ```{r}
 # Create recipe for data preprocessing
-
 weather_recipe <- recipe(yield_mg_ha ~ ., data = train_data) %>% 
-  step_rm(n_plots, year, site, 
-          hybrid, soilpH_missing,  
-          om_pct_missing,soilk_ppm_missing, soilp_ppm_missing, 
-          parent1, parent2, 
-          site_original, previous_crop)
+  step_rm(year) %>%
+  step_novel(all_nominal_predictors())%>%
+  step_dummy(all_nominal_predictors(), one_hot = TRUE) %>%
+  step_zv(all_predictors())
     
 weather_recipe
 ```
@@ -1055,10 +1163,73 @@ final_spec %>%
 ```
 
 
-  - **One more model of your choice not used in class**.  
-
-You can find a list of all tydymodels supported models here:  
+  - **One more model of your choice not used in class**. 
+  
+  You can find a list of all tydymodels supported models here:  
 https://www.tidymodels.org/find/parsnip/  
+  
+We will use the Multivariate adaptive regression splines (MARS) via earth from parsnip package. It is a non-parametric regression technique and can be seen as an extension of linear models that automatically models nonlinearities and interactions between variables.
+
+```{r}
+install.packages("earth")
+```
+
+```{r}
+mars_spec <- mars(
+  num_terms = tune(),
+  prod_degree = tune(),
+  prune_method = tune()) %>%
+  set_engine("earth") %>%
+  set_mode("regression")
+
+```
+
+```{r}
+mars_workflow <- workflow() %>%
+  add_recipe(weather_recipe) %>%
+  add_model(mars_spec)
+```
+
+```{r}
+mars_grid <- grid_regular(
+  num_terms(range = c(5, 50)),
+  prod_degree(range = c(1, 2)),
+  prune_method(values = c("backward", "none")),
+  levels = 5
+)
+```
+
+```{r}
+set.seed(1234)
+
+mars_res <- tune_grid(
+  mars_workflow,
+  resamples = resampling_foldcv,
+  grid = mars_grid,
+  metrics = metric_set(rmse, rsq, mae)
+)
+```
+
+```{r}
+best_mars <- mars_res %>%
+  select_best(metric = "rmse")
+
+best_mars
+```
+
+
+```{r}
+final_mars_workflow <- mars_workflow %>%
+  finalize_workflow(best_mars)
+
+mars_fit_2023 <- last_fit(
+  final_mars_workflow,
+  split = data_split_2023,
+  metrics = metric_set(rmse, rsq, mae)
+)
+
+collect_metrics(mars_fit_2023)
+```
 
 # F. Training strategies  
 For both XGboost and your model of choice, the entire training process is up to you.  
