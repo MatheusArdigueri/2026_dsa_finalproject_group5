@@ -915,7 +915,7 @@ You are asked to fully train two different machine learning models:
   - XGboost (everyone)  
 
 
-1. Pre-processing
+1. Pre-processing for XGBoost
 
 ```{r}
 library(tidymodels)
@@ -927,7 +927,7 @@ a. Splitting
 ```{r}
 set.seed(931735)
 train_data <- train_model_ready %>%
-  filter(year <= 2022)
+  filter(year <= 2014)
 
 valid_data_2023 <- train_model_ready %>%
   filter(year == 2023)
@@ -940,7 +940,7 @@ data_split_2023 <- make_splits(
        assessment = which(train_model_ready$year == 2023)
 ), data = train_model_ready)
 
-data_split
+data_split_2023
 ```
 
 Distribution of outcome variable (yield_mg_ha)
@@ -950,7 +950,7 @@ ggplot() +
   geom_density(data = train_data, 
                aes(x = yield_mg_ha),
                color = "red") +
-  geom_density(data = valid_data, 
+  geom_density(data = valid_data_2023, 
                aes(x = yield_mg_ha),
                color = "blue")+
   labs(x = "Yield (mg/ha)",
@@ -1143,6 +1143,19 @@ best_xgb
 ```
 
 ```{r}
+final_spec <- boost_tree(
+  trees = best_rmse$trees,           # Number of boosting rounds (trees)
+  tree_depth = best_rmse$tree_depth, # Maximum depth of each tree
+  min_n = best_rmse$min_n,           # Minimum number of samples to split a node
+  learn_rate = best_rmse$learn_rate  # Learning rate (step size shrinkage)
+) %>%
+  set_engine("xgboost") %>%
+  set_mode("regression")
+
+final_spec
+```
+
+```{r}
 final_xgb_workflow <- workflow() %>%
   add_recipe(weather_recipe) %>%
   add_model(xgb_spec) %>%
@@ -1150,6 +1163,23 @@ final_xgb_workflow <- workflow() %>%
 ```
 
 Evaluationg XGBoost for year 2023 which is our validation data
+
+```{r}
+set.seed(10)
+final_fit <- last_fit(final_spec,
+                weather_recipe,
+                split = data_split_2023)
+
+final_fit %>%
+  collect_predictions()
+```
+
+```{r}
+final_fit %>%
+  collect_metrics()
+```
+
+
 ```{r}
 set.seed(10)
 
@@ -1158,9 +1188,9 @@ xgb_fit_2023 <- last_fit(final_xgb_workflow, split = data_split_2023, metrics = 
 collect_metrics(xgb_fit_2023)
 
 xgb_pred_2023 <- collect_predictions(xgb_fit_2023)
-
 ```
 
+Evaluation on training set
 
 ```{r}
 final_spec %>%
@@ -1188,11 +1218,14 @@ final_fit %>%
   collect_predictions() %>%
   ggplot(aes(x = yield_mg_ha,
              y = .pred)) +
-  geom_point() +
+  geom_point(color = "darkred", alpha = 0.8) +
   geom_abline() +
   geom_smooth(method = "lm") +
-  scale_x_continuous(limits = c(20, 40)) +
-  scale_y_continuous(limits = c(20, 40)) 
+  labs(
+    x = "Observed yield",
+    y = "Predicted yield",
+    title = "Observed vd predicted yield"
+  )
 ```
 
 ```{r}
@@ -1200,6 +1233,7 @@ final_spec %>%
   fit(yield_mg_ha ~ .,
          data = bake(weather_prep, train_data)) %>% #There little change in variable importance if you use full dataset
     vi() %>%
+  slice_max(Importance, n=20) %>%
   mutate(
     Variable = fct_reorder(Variable, 
                            Importance)
@@ -1220,7 +1254,8 @@ https://www.tidymodels.org/find/parsnip/
 We will use the Multivariate adaptive regression splines (MARS) via earth from parsnip package. It is a non-parametric regression technique and can be seen as an extension of linear models that automatically models nonlinearities and interactions between variables.
 
 ```{r}
-install.packages("earth")
+#install.packages("earth")
+library(earth)
 ```
 
 ```{r}
