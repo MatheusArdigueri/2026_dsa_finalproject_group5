@@ -1,16 +1,11 @@
-library(shiny)
+
 library(tidyverse)
 library(plotly)
 library(png)
 library(grid)
-library(here)
-library(ggcorrplot)
-library(vip)         
-library(xgboost)
-library(USAboundaries) # for US state boundaries
-library(randomForest) 
-library(recipes)     
-library(rsconnect)   
+library(USAboundaries)
+library(shiny)
+
 # Load df_model
 df_model <- df_model <- read_csv("data/train_model_ready.csv")
 
