@@ -1733,9 +1733,6 @@ saveRDS(
 
 **One more model of your choice not used in class**. 
   
-You can find a list of all tydymodels supported models here:  
-https://www.tidymodels.org/find/parsnip/  
-  
 We will use the Multivariate adaptive regression splines (MARS) via earth from parsnip package. It is a non-parametric regression technique and can be seen as an extension of linear models that automatically models nonlinearities and interactions between variables.
 # MARS (Multivariate adaptive regression splines)
 https://parsnip.tidymodels.org/reference/mars.html
