@@ -179,7 +179,7 @@ write_csv(
   here("output", "csv", "xgb_tuning_metrics.csv")
 )
 
-best_xgb <- select_best(xgb_res, metric = "rmse")
+best_xgb <- select_best(xgb_res, metric = "rmse")  # RSQ as we used in class
 
 write_csv(
   best_xgb,
@@ -399,7 +399,7 @@ write_csv(
   here("output", "csv", "mars_tuning_metrics.csv")
 )
 
-best_mars <- select_best(mars_res, metric = "rmse")
+best_mars <- select_best(mars_res, metric = "rmse") # RSQ as we used in class
 
 write_csv(
   best_mars,

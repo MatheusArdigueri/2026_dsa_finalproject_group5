@@ -1545,7 +1545,7 @@ write_csv(
   here("output", "csv", "xgb_tuning_metrics.csv")
 )
 
-best_xgb <- select_best(xgb_res, metric = "rsq")
+best_xgb <- select_best(xgb_res, metric = "rmse")
 
 write_csv(
   best_xgb,
@@ -1793,7 +1793,7 @@ mars_res <- tune_grid(
 ## Best and Final model
 
 ```{r}
-best_mars <- select_best(mars_res, metric = "r2")
+best_mars <- select_best(mars_res, metric = "rmse")
 
 final_mars_workflow <- mars_workflow %>%
   finalize_workflow(best_mars)
