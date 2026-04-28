@@ -5,6 +5,7 @@ editor: visual
 ---
 
 # Importing libraries
+
 ```{r}
 library(tidyverse)
 library(USAboundaries) # for US state boundaries
@@ -14,6 +15,7 @@ library(daymetr)
 ```
 
 # Reading CSV file containing field
+
 ```{r }
 field <- read_csv("../data/training/training_meta_filtered.csv")
 
@@ -21,6 +23,7 @@ field
 ```
 
 # EDA
+
 ```{r Distinct years}
 field %>%
   distinct(year)
@@ -32,7 +35,7 @@ field %>%
 
 ```
 
-40 different locations along 10 years. 
+40 different locations along 10 years.
 
 ```{r Plot of locations}
 states <- us_states() %>%
@@ -45,7 +48,9 @@ ggplot() +
              y = latitude,
              color = site))
 ```
+
 # Using Daymet to download opensource climate data
+
 ```{r}
 names(field)
 
@@ -76,6 +81,7 @@ daymet_all_2 <- daymet_all %>%
 ```
 
 # Unnesting downloaded data
+
 ```{r}
 daymet_all_unnest <- daymet_all_2 %>%
   unnest(weather) %>%
@@ -87,12 +93,14 @@ daymet_all_unnest
 ```
 
 # Exporting result
+
 ```{r}
 write_csv(daymet_all_unnest,
           file="../data/training/2026_project_fieldweatherdata.csv")
 ```
 
 # Reading exported result
+
 ```{r}
 fieldweather <- read_csv("../data/training/2026_project_fieldweatherdata.csv")
 
@@ -104,6 +112,7 @@ fieldweather
 ```{r}
 names(fieldweather)
 ```
+
 ```{r}
 fieldweather %>%
   pivot_longer(cols = dayl_s:vp_pa) %>%
@@ -111,6 +120,7 @@ fieldweather %>%
   geom_density() +
   facet_wrap(~name, scales = "free")
 ```
+
 ```{r}
 climate_month <- fieldweather %>%
   dplyr::select(year, site, lat, long,
@@ -129,4 +139,3 @@ climate_month <- fieldweather %>%
 
 climate_month
 ```
-

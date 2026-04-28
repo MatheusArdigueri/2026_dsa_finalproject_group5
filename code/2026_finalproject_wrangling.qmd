@@ -5,6 +5,7 @@ editor: visual
 ---
 
 # Importing libraries
+
 ```{r}
 library(tidyverse)
 library(janitor)
@@ -16,16 +17,19 @@ library(ggplot2)
 ```
 
 # Reading dataframe
+
 ```{r}
 metadata <- read_csv("./data/training/training_meta.csv")
 
 metadata
 ```
 
-# EDA 
+# EDA
+
 ```{r}
 summary(metadata)
 ```
+
 ```{r}
 states <- us_states() %>%
   filter(!(state_abbr %in% c("PR","AK","HI")))
@@ -38,12 +42,12 @@ ggplot() +
              color = site))
 ```
 
-
 US ranges latitude from 25 to 50 and longitude from -125 to -66, so there are sites outside US. (Removing since project is based on US)
 
 Also there are two places in Canada, Ontario. ONH1 ONH2.
 
 # Filtering data
+
 ```{r}
 met_filt <- metadata %>%
   filter(
@@ -55,9 +59,10 @@ met_filt <- metadata %>%
 
 summary(met_filt)
 ```
+
 Looks good now, lets confirm everything is right.
 
-```{r} 
+```{r}
 ggplot() +
   geom_sf(data = states) +
   geom_point(data = met_filt, aes(
@@ -65,11 +70,12 @@ ggplot() +
              y = latitude,
              color = site))
 ```
+
 # Exporting Correct data
+
 ```{r}
 write.csv(met_filt,
           file = "./data/training/training_meta_filtered.csv")
 
 
 ```
-
