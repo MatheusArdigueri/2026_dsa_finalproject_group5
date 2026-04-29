@@ -1,0 +1,2 @@
+num_terms,prod_degree,prune_method,.config
+50,2,backward,pre0_mod19_post0
