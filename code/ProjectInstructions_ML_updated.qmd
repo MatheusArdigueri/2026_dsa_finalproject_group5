@@ -1718,7 +1718,7 @@ set.seed(10)
 
 final_xgb_fit <- final_xgb_workflow_full %>%
   fit(data = train_model_ready)
-
+10
 xgb_pred_test <- predict(
   final_xgb_fit,
   new_data = test_model_ready
