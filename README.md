@@ -26,4 +26,7 @@ April 28 (Aashma Tiwari + Matheus Ardigueri)
 
 Matheus finished running the models and finished the shiny app but had problems with publishing the app in his account (Account failed error:1)
 Aashma published the shiny app presenting the results obtained from sapello.
-Aashma published
+
+April 29 (Matheus Ardigueri) 
+
+Matheus finished wraping up the results in pptx file and in csv file for submit and submitted the work
