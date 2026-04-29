@@ -2,9 +2,11 @@
 
 # 2026_dsa_finalproject_group5
 
-April 14: (Aashma Tiwari)
+April 14: (Aashma Tiwari + Matheus Ardigueri)
 
-Raw data files: training_meta, training_trait, training_soil
+Matheus: Oppened github repository and project
+
+Aashma: Raw data files: training_meta, training_trait, training_soil
 
 Performed initial cleaning of the three training datasets by:
 1. Checking for duplicated rows and removing them.
