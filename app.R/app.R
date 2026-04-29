@@ -3,7 +3,7 @@ library(tidyverse)
 library(plotly)
 library(png)
 library(grid)
-library(USAboundaries)
+library(maps)
 library(shiny)
 
 # Load df_model
@@ -143,11 +143,11 @@ ui <- fluidPage(
       fluidRow(
         column(
           6,
-          plotOutput("xgb_vi_plot", height = "600px")
+          uiOutput("xgb_vi_plot")
         ),
         column(
           6,
-          plotOutput("mars_vi_plot", height = "600px")
+          uiOutput("mars_vi_plot")
         )
       )
     ),
@@ -157,11 +157,11 @@ ui <- fluidPage(
       fluidRow(
         column(
           6,
-          plotOutput("XGBoost", height = "600px")
+          uiOutput("XGBoost")
         ),
         column(
           6,
-          plotOutput("MARS", height = "600px")
+          uiOutput("MARS")
         )
       )
     )
@@ -173,16 +173,17 @@ server <- function(input, output, session) {
   # US map
   output$sites_map <- renderPlot({
     
-    states <- us_states() %>%
-      filter(!(state_abbr %in% c("PR", "AK", "HI")))
-    
-    df_traits_points <- df_traits %>%
-      sf::st_drop_geometry()
+    states <- map_data("state")
     
     ggplot() +
-      geom_sf(data = states, fill = "gray95", color = "black") +
+      geom_polygon(
+        data = states,
+        aes(x = long, y = lat, group = group),
+        fill = "gray95",
+        color = "black"
+      ) +
       geom_point(
-        data = df_traits_points,
+        data = df_traits,
         aes(
           x = longitude,
           y = latitude,
@@ -190,7 +191,7 @@ server <- function(input, output, session) {
         ),
         size = 3
       ) +
-      coord_sf() +
+      coord_fixed(1.3) +
       theme_minimal() +
       labs(
         title = "Experiment Sites",
@@ -199,18 +200,16 @@ server <- function(input, output, session) {
         color = "Site"
       ) +
       theme(
-        title = element_text(size = 23),
-        legend.text = element_text(size = 20),
-        legend.title = element_text(size = 23),
-        axis.title.x = element_text(size = 23),
-        axis.title.y = element_text(size = 23),
-        axis.text.x = element_text(size = 20),
-        axis.text.y = element_text(size = 20)
-        
+        plot.title = element_text(size = 23, face = "bold"),
+        legend.text = element_text(size = 16),
+        legend.title = element_text(size = 18),
+        axis.title.x = element_text(size = 18),
+        axis.title.y = element_text(size = 18),
+        axis.text.x = element_text(size = 14),
+        axis.text.y = element_text(size = 14)
       )
   })
 
-  
   # Boxplot
   output$boxplot <- renderPlotly({
     filtered_data <- df_model %>%
@@ -296,68 +295,37 @@ server <- function(input, output, session) {
   })
   
   # Variable Importance Plot
-  output$xgb_vi_plot <- renderPlot({
-    img_path <- "data/xgb_variable_importance.png"
-    
-    print(paste("Image path:", img_path))
-    print(paste("File exists:", file.exists(img_path)))
-    
-    if (file.exists(img_path)) {
-      img <- png::readPNG(img_path)
-      grid::grid.raster(img, width = unit(1, "npc"), height = unit(1, "npc"))
-    } else {
-      plot.new()
-      text(0.5, 0.5, "XGBoost Variable Importance Plot Not Found", cex = 1.3)
-    }
+  output$xgb_vi_plot <- renderUI({
+    tags$img(
+      src = "xgb_variable_importance.png",
+      width = "100%"
+    )
   })
   
-  output$mars_vi_plot <- renderPlot({
-    img_path <- "data/mars_variable_importance.png"
-    
-    print(paste("Image path:", img_path))
-    print(paste("File exists:", file.exists(img_path)))
-    
-    if (file.exists(img_path)) {
-      img <- png::readPNG(img_path)
-      grid::grid.raster(img, width = unit(1, "npc"), height = unit(1, "npc"))
-    } else {
-      plot.new()
-      text(0.5, 0.5, "MARS Variable Importance Plot Not Found", cex = 1.3)
-    }
+  output$mars_vi_plot <- renderUI({
+    tags$img(
+      src = "mars_variable_importance.png",
+      width = "100%"
+    )
   })
+  
+  
   
   # Results: Predicted vs Actual Plot
-  output$XGBoost <- renderPlot({
-    img_path <- "data/xgb_predicted_vs_observed_2023.png"
-    
-    print(paste("Image path:", img_path))
-    print(paste("File exists:", file.exists(img_path)))
-    
-    if (file.exists(img_path)) {
-      img <- png::readPNG(img_path)
-      grid::grid.raster(img, width = unit(1, "npc"), height = unit(1, "npc"))
-    } else {
-      plot.new()
-      text(0.5, 0.5, "XGB Predicted x Observed not found", cex = 1.3)
-    }
+  output$XGBoost <- renderUI({
+    tags$img(
+      src = "xgb_predicted_vs_observed_2023.png",
+      width = "100%"
+    )
   })
-
-  output$MARS <- renderPlot({
-    img_path <- "data/mars_predicted_vs_observed_2023.png"
-    
-    print(paste("Image path:", img_path))
-    print(paste("File exists:", file.exists(img_path)))
-    
-    if (file.exists(img_path)) {
-      img <- png::readPNG(img_path)
-      grid::grid.raster(img, width = unit(1, "npc"), height = unit(1, "npc"))
-    } else {
-      plot.new()
-      text(0.5, 0.5, "MARS Predicted x Observed not found", cex = 1.3)
-    }
+  
+  output$MARS <- renderUI({
+    tags$img(
+      src = "mars_predicted_vs_observed_2023.png",
+      width = "100%"
+    )
   })
 }
-  
 # Run the App
 shinyApp(ui = ui, server = server)
 
