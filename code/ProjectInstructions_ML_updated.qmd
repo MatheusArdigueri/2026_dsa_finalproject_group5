@@ -402,6 +402,8 @@ Data characteristics:
 ```{r}
 testing_meta_clean <- read_csv("../data/testing/testing_meta_clean.csv")
 
+train_meta_clean <- read_csv('../data/training/training_meta_filtered.csv')
+
 head(testing_meta_clean, 5)
 
 testing_meta_clean %>% distinct(site)
@@ -412,12 +414,18 @@ testing_meta_clean %>% distinct(site)
 states <- us_states() %>%
   filter(!(state_abbr %in% c("PR","AK","HI")))
 
-ggplot() +
+a <- ggplot() +
   geom_sf(data = states) +
-  geom_point(data = testing_meta_clean, aes(
+  geom_point(data = train_meta_clean, aes(
              x = longitude,
              y = latitude,
              color = site))
+
+ggsave(filename = "../data/map_plots_train.png",
+       plot = a,
+       height = 10,
+       width = 10,
+       dpi = 600)
 ```
 There are traits outside US, so lets remove them to download Daymet data properly, since trails experiment is inside US and daymet has good accuracy in US.
 
@@ -1259,11 +1267,6 @@ https://www.tidymodels.org/find/parsnip/
 We will use the Multivariate adaptive regression splines (MARS) via earth from parsnip package. It is a non-parametric regression technique and can be seen as an extension of linear models that automatically models nonlinearities and interactions between variables.
 
 ```{r}
-#install.packages("earth")
-library(earth)
-```
-
-```{r}
 mars_spec <- mars(
   num_terms = tune(),
   prod_degree = tune(),
@@ -1343,7 +1346,7 @@ mars_pred_2024 <- predict(final_mars_fit, new_data = test_model_ready) %>%
 
 mars_pred_2024
 ```
->>>>>>> 6ba0dc8cc85366c0c0995a0fdd8a3337c62d756f
+
 
 # F. Training strategies  
 For both XGboost and your model of choice, the entire training process is up to you.  
@@ -1611,6 +1614,10 @@ write_csv(
 ```
 
 ```{r}
+
+
+xgb_train_pred <- read_csv("../data/xgb_train_pred.csv")
+xgb_train_metrics <- read_csv("../data/xgb_training_metrics.csv")
 
 xgb_publication_ready <- xgb_train_pred %>%
   ggplot(aes(x = yield_mg_ha, y = .pred)) +
