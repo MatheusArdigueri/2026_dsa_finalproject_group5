@@ -1362,14 +1362,14 @@ That means you decide things like
 ## Oppening data
 ```{r}
 train_model_ready <- read_csv(here("data", "train_model_ready.csv")) %>%
-  select(-any_of(c("...1", "n_plots", "hybrid", "previous_crop", "inbred"))) %>%
+  select(-any_of(c("...1", "n_plots", "hybrid"))) %>%
   mutate(
     year = as.numeric(year),
     site = as.character(site)
   )
 
 test_model_ready <- read_csv(here("data", "test_model_ready.csv")) %>%
-  select(-any_of(c("...1", "n_plots", "hybrid", "previous_crop", "inbred"))) %>%
+  select(-any_of(c("...1", "n_plots", "hybrid"))) %>%
   mutate(
     year = as.numeric(year),
     site = as.character(site)
