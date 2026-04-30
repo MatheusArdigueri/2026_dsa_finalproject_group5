@@ -18,7 +18,8 @@ Saved the initial cleaned files as: training_meta_clean, training_trait_clean, t
 April 15: (Matheus Ardigueri)
 
 Downloaded open data and performed feature engeneering using same structure as in class (Monthly dayl, temperature and precipitation.
-After meeting in class, Aashma changed the format to sum of precipiration, cumulative growing degree days and mean temperature and Started building the ML models.
+After meeting in class, Aashma changed the format to sum of precipitation, cumulative growing degree days, mean of maximum and minimum 
+temperature and hot days (temperature greater than 30 degree Celcius coded as hot days) and started building the ML models.
 
 April 25 (Aashma Tiwari + Matheus Ardigueri)
 
