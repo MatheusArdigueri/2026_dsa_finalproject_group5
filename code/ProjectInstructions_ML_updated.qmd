@@ -1835,10 +1835,19 @@ mars_fit_2023 <- last_fit(
 mars_pred_2023 <- collect_predictions(mars_fit_2023)
 ```
 
+Validation dataset prediction
+```{r}
+mars_validation_pred <- read_csv("../data/mars_2023_validation_predictions.csv")
+
+mars_validation_metrics <- read_csv("../data/mars_2023_validation_metrics.csv")
+
+```
+
 ## MARS Publication Ready plot
 
+Observed vs Predicted for year 2023
 ```{r}
-mars_publication_ready <- mars_train_pred %>%
+mars_publication_ready <- mars_validation_pred %>%
   ggplot(aes(x = yield_mg_ha, y = .pred)) +
   geom_point(
     aes(fill = yield_mg_ha),
@@ -1860,9 +1869,9 @@ mars_publication_ready <- mars_train_pred %>%
     y = -Inf,
     label = paste0(
       "R-sq: ",
-      mars_train_metrics$estimate[mars_train_metrics$.metric == "rsq"],
+      mars_validation_metrics$estimate[mars_validation_metrics$.metric == "rsq"],
       "\nRMSE: ",
-      mars_train_metrics$estimate[mars_train_metrics$.metric == "rmse"]
+      mars_validation_metrics$estimate[mars_validation_metrics$.metric == "rmse"]
     ),
     hjust = 1.1,
     vjust = -0.5
@@ -1881,7 +1890,7 @@ ggsave(
 )
 ```
 
-## Final Model
+## Final Model specification
 
 ```{r}
 final_mars_fit <- final_mars_workflow %>%
