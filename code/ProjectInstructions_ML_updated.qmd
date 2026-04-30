@@ -1615,11 +1615,10 @@ write_csv(
 
 ```{r}
 
+xgb_validation_pred <- read_csv("../output/csv/xgb_2023_validation_predictions.csv")
+xgb_validation_metrics <- read_csv("../output/csv/xgb_2023_validation_metrics.csv")
 
-xgb_train_pred <- read_csv("../data/xgb_train_pred.csv")
-xgb_train_metrics <- read_csv("../data/xgb_training_metrics.csv")
-
-xgb_publication_ready <- xgb_train_pred %>%
+xgb_publication_ready <- xgb_validation_pred %>%
   ggplot(aes(x = yield_mg_ha, y = .pred)) +
   geom_point(
     aes(fill = yield_mg_ha),
@@ -1633,7 +1632,7 @@ xgb_publication_ready <- xgb_train_pred %>%
   labs(
     x = "Observed Yield (Mg/ha)",
     y = "Predicted Yield (Mg/ha)",
-    title = "XGBoost: Observed vs Predicted Yield"
+    title = "XGBoost: Observed vs Predicted Yield for Validation Dataset"
   ) +
   annotate(
     "label",
@@ -1641,9 +1640,9 @@ xgb_publication_ready <- xgb_train_pred %>%
     y = -Inf,
     label = paste0(
       "R-sq: ",
-      xgb_train_metrics$estimate[xgb_train_metrics$.metric == "rsq"],
+      xgb_validation_metrics$estimate[xgb_validation_metrics$.metric == "rsq"],
       "\nRMSE: ",
-      xgb_train_metrics$estimate[xgb_train_metrics$.metric == "rmse"]
+      xgb_validation_metrics$estimate[xgb_validation_metrics$.metric == "rmse"]
     ),
     hjust = 1.1,
     vjust = -0.5
@@ -1655,14 +1654,14 @@ xgb_publication_ready <- xgb_train_pred %>%
 
 ggsave(
   plot = xgb_publication_ready,
-  filename = here("output", "png", "xgb_predicted_vs_observed_2023.png"),
+  filename = here("output", "png", "xgb_predicted_vs_observed_Validation.png"),
   height = 6,
   width = 9,
   dpi = 600
 )
 
-str(xgb_pred_test$yield_mg_ha)
-summary(xgb_pred_test$yield_mg_ha)
+#str(xgb_pred_test$yield_mg_ha)
+#summary(xgb_pred_test$yield_mg_ha)
 
 ```
 
